@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <cmath>
 
+#include "RansEncode.h"
 
 // TODO class
 struct WaveletLayer
@@ -30,6 +31,17 @@ struct WaveletLayer
     std::vector<uint16_t> parentVals;
     WaveletLayer *parent;
 };
+
+SymbolCountDict GenerateSymbolCountDictionary(std::vector<uint16_t> symbols)
+{
+    SymbolCountDict symbolCounts;
+    for (auto symbol : symbols)
+    {
+        symbolCounts.try_emplace(symbol, 0);
+        symbolCounts[symbol] += 1;
+    }
+    return symbolCounts;
+}
 
 void GetSymbolEntropy(std::vector<uint16_t> symbols)
 {
@@ -152,7 +164,16 @@ int main()
         std::vector<uint16_t> values;
         values.resize(width * height);
         memcpy(&values[0], bytes, width * height * sizeof(uint16_t));
-
+        
+        std::cout << "Getting uncompressed/raw symbol counts..." << std::endl;
+        SymbolCountDict initialSymbolCounts = GenerateSymbolCountDictionary(values);
+        std::cout << "Generating initial rANS state..." << std::endl;
+        // rANS encode - 24-bit probability, 8-bit blocks
+        RansState ransState(24, initialSymbolCounts, 8);
+        std::cout << "rANS encoding values..." << std::endl;
+        for(auto value : values)
+            ransState.AddSymbol(value);
+        std::cout << "Encoded bytes: " << ransState.GetCompressedBlocks().size() << std::endl;
         std::cout << "Getting initial entropy..." << std::endl;
         GetSymbolEntropy(values);
         std::cout << "Getting compressed entropy..." << std::endl;

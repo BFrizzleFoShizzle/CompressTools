@@ -18,5 +18,13 @@
     <ClCompile Include="CompressTools.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RansEncode.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RansEncode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
