@@ -137,6 +137,32 @@ int main()
             }
         }
         std::cout << "Decoded wavelets checked." << std::endl;
+        // smush all the wavelets together (this is bad for compression, but D-Day is tomorrow, haha)
+        std::vector<uint16_t> waveletsToEncode;
+        waveletLayer = bottomLayer;
+        while (waveletLayer->GetParentLayer() != nullptr)
+        {
+            // append
+            const std::vector<uint16_t>& layerWavelets = waveletLayer->GetWavelets();
+            waveletsToEncode.insert(waveletsToEncode.end(), layerWavelets.begin(), layerWavelets.end());
+            waveletLayer = waveletLayer->GetParentLayer();
+        }
+        // finish last element
+        const std::vector<uint16_t>& layerWavelets = waveletLayer->GetWavelets();
+        waveletsToEncode.insert(waveletsToEncode.end(), layerWavelets.begin(), layerWavelets.end());
+
+        // all the wavelets are now in one array
+        std::cout << "Total wavelets: " << waveletsToEncode.size() << std::endl;
+        std::cout << "Getting wavelet symbol counts..." << std::endl;
+        SymbolCountDict waveletSymbolCounts = GenerateSymbolCountDictionary(waveletsToEncode);
+        std::cout << "Generating initial rANS state..." << std::endl;
+        // rANS encode - 24-bit probability, 8-bit blocks
+        RansState waveletRansState(24, waveletSymbolCounts, 8);
+        std::cout << "rANS encoding values..." << std::endl;
+        for (auto value : waveletsToEncode)
+            waveletRansState.AddSymbol(value);
+        std::cout << "Encoded bytes: " << waveletRansState.GetCompressedBlocks().size() << std::endl;
+
 
     }
     
