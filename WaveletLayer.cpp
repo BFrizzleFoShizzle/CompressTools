@@ -4,7 +4,7 @@
 #include <assert.h>
 
 WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_t height)
-    : parent(nullptr), width(width), height(height)
+    : width(width), height(height)
 {
     assert(values.size() == width * height);
     //  Initialize + prealloc memory
@@ -67,9 +67,7 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
     if (GetParentWidth() > 1 && GetParentHeight() > 1)
     {
         std::cout << "Processing parent..." << std::endl;
-
-        // TODO shared_ptr/memory management?
-        parent = new WaveletLayer(parentVals, GetParentWidth(), GetParentHeight());
+        parent = std::make_shared<WaveletLayer>(parentVals, GetParentWidth(), GetParentHeight());
     }
 }
 
@@ -112,7 +110,7 @@ uint16_t WaveletLayer::DecodeAt(uint32_t x, uint32_t y) const
     return decoded;
 }
 
-WaveletLayer* WaveletLayer::GetParentLayer() const
+std::shared_ptr<WaveletLayer> WaveletLayer::GetParentLayer() const
 {
     return parent;
 }

@@ -97,10 +97,10 @@ int main()
         std::cout << "Getting initial entropy..." << std::endl;
         GetSymbolEntropy(values);
         std::cout << "Getting compressed entropy..." << std::endl;
-        WaveletLayer bottomLayer = WaveletLayer(values, width, height);
-        WaveletLayer* waveletLayer = &bottomLayer;
+        std::shared_ptr<WaveletLayer> bottomLayer = std::make_shared<WaveletLayer>(values, width, height);
+        std::shared_ptr<WaveletLayer> waveletLayer = bottomLayer;
 
-        std::vector<WaveletLayer*> waveletLayers;
+        std::vector<std::shared_ptr<WaveletLayer>> waveletLayers;
         waveletLayers.push_back(waveletLayer);
         // Queue up wavelet layers
         while (waveletLayer->GetParentLayer() != nullptr)
@@ -113,11 +113,10 @@ int main()
         while (waveletLayers.size() > 0)
         {
             std::cout << "Decompressing layer..." << std::endl;
-            WaveletLayer* currLayer = waveletLayers.back();
+            std::shared_ptr<WaveletLayer> currLayer = waveletLayers.back();
             // TODO does this do a copy?
             const std::vector<uint16_t> wavelets = currLayer->GetWavelets();
-            // TODO garbage collection/memory leak
-            WaveletLayer* reconstructedLayer = new WaveletLayer(wavelets, parentVals, currLayer->GetWidth(), currLayer->GetHeight());
+            std::shared_ptr<WaveletLayer> reconstructedLayer = std::make_shared<WaveletLayer>(wavelets, parentVals, currLayer->GetWidth(), currLayer->GetHeight());
 
             std::vector<uint16_t> decodedValues = reconstructedLayer->DecodeLayer();
 
@@ -125,7 +124,7 @@ int main()
             parentVals = std::move(decodedValues);
             waveletLayers.pop_back();
         }
-        std::cout << values.size() << " " << parentVals.size();
+        std::cout << values.size() << " " << parentVals.size() << std::endl;
         // this is now the child values
         std::cout << "Checking decoded values..." << std::endl;
         // check wavelet decode is correct

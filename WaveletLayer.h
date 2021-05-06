@@ -1,16 +1,13 @@
 #pragma once
 
 #include <vector>
+#include <memory>
 
 class WaveletLayer
 {
 public:
     WaveletLayer(std::vector<uint16_t> data, uint32_t width, uint32_t height);
     WaveletLayer(std::vector<uint16_t> wavelets, std::vector<uint16_t> parentVals, uint32_t width, uint32_t height);
-
-    // TODO static?
-    // TODO move to constructor?
-    //void ProcessImageData(uint16_t* data, const uint32_t width, const uint32_t height);
 
     uint16_t DecodeAt(uint32_t x, uint32_t y) const;
     std::vector<uint16_t> DecodeLayer() const;
@@ -19,7 +16,7 @@ public:
     const std::vector<uint16_t> GetParentVals() const;
     uint32_t GetWidth() const;
     uint32_t GetHeight() const;
-    WaveletLayer* GetParentLayer() const;
+    std::shared_ptr<WaveletLayer> GetParentLayer() const;
 
 private:
     // TODO check
@@ -30,5 +27,5 @@ private:
     uint32_t height;
     std::vector<uint16_t> wavelets;
     std::vector<uint16_t> parentVals;
-    WaveletLayer* parent;
+    std::shared_ptr<WaveletLayer> parent;
 };
