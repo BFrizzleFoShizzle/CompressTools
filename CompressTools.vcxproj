@@ -87,9 +87,11 @@
   <ItemGroup>
     <ClCompile Include="CompressTools.cpp" />
     <ClCompile Include="RansEncode.cpp" />
+    <ClCompile Include="WaveletLayer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RansEncode.h" />
+    <ClInclude Include="WaveletLayer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
