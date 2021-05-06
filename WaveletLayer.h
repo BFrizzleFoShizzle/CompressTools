@@ -6,6 +6,7 @@ class WaveletLayer
 {
 public:
     WaveletLayer(std::vector<uint16_t> data, uint32_t width, uint32_t height);
+    WaveletLayer(std::vector<uint16_t> wavelets, std::vector<uint16_t> parentVals, uint32_t width, uint32_t height);
 
     // TODO static?
     // TODO move to constructor?
@@ -13,7 +14,12 @@ public:
 
     uint16_t DecodeAt(uint32_t x, uint32_t y) const;
     std::vector<uint16_t> DecodeLayer() const;
-    WaveletLayer* GetParent() const;
+    // TODO is this really const?
+    const std::vector<uint16_t> GetWavelets() const;
+    const std::vector<uint16_t> GetParentVals() const;
+    uint32_t GetWidth() const;
+    uint32_t GetHeight() const;
+    WaveletLayer* GetParentLayer() const;
 
 private:
     // TODO check

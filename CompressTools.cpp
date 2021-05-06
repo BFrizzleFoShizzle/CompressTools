@@ -10,6 +10,7 @@
 #include <vector>
 #include <unordered_map>
 #include <cmath>
+#include <assert.h>
 
 #include "RansEncode.h"
 #include "WaveletLayer.h"
@@ -97,6 +98,46 @@ int main()
         GetSymbolEntropy(values);
         std::cout << "Getting compressed entropy..." << std::endl;
         WaveletLayer bottomLayer = WaveletLayer(values, width, height);
+        WaveletLayer* waveletLayer = &bottomLayer;
+
+        std::vector<WaveletLayer*> waveletLayers;
+        waveletLayers.push_back(waveletLayer);
+        // Queue up wavelet layers
+        while (waveletLayer->GetParentLayer() != nullptr)
+        {
+            waveletLayer = waveletLayer->GetParentLayer();
+            waveletLayers.push_back(waveletLayer);
+        }
+        // Decode pyramid
+        std::vector<uint16_t> parentVals = waveletLayer->GetParentVals();
+        while (waveletLayers.size() > 0)
+        {
+            std::cout << "Decompressing layer..." << std::endl;
+            WaveletLayer* currLayer = waveletLayers.back();
+            // TODO does this do a copy?
+            const std::vector<uint16_t> wavelets = currLayer->GetWavelets();
+            // TODO garbage collection/memory leak
+            WaveletLayer* reconstructedLayer = new WaveletLayer(wavelets, parentVals, currLayer->GetWidth(), currLayer->GetHeight());
+
+            std::vector<uint16_t> decodedValues = reconstructedLayer->DecodeLayer();
+
+            // pass decoded vals down to next layer
+            parentVals = std::move(decodedValues);
+            waveletLayers.pop_back();
+        }
+        std::cout << values.size() << " " << parentVals.size();
+        // this is now the child values
+        std::cout << "Checking decoded values..." << std::endl;
+        // check wavelet decode is correct
+        for (int i = 0; i < values.size(); ++i)
+        {
+            assert(values[i] == parentVals[i]);
+            if (values[i] != parentVals[i])
+            {
+                std::cout << "Decoded wavelet values at " << i << " did not match." << std::endl;
+            }
+        }
+        std::cout << "Decoded wavelets checked." << std::endl;
 
     }
     
