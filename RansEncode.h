@@ -5,7 +5,28 @@
 
 // Ported from my old Python implementation
 
+// TODO can we replace this with sorted symbol count vector?
 typedef std::unordered_map<uint16_t, uint32_t> SymbolCountDict;
+
+// helper struct
+struct SymbolCount
+{
+	SymbolCount()
+		: symbol(-1), count(-1)
+	{
+	}
+	SymbolCount(uint16_t symbol, uint32_t count)
+		: symbol(symbol), count(count)
+	{
+
+	}
+
+	uint16_t symbol;
+	uint32_t count;
+
+};
+
+std::vector<SymbolCount> EntropySortSymbols(SymbolCountDict dict);
 
 // 16Kx16K shouldn't overflow 32-bit counts
 class RansEntry
@@ -46,6 +67,8 @@ class RansState
 public:
 	// rANS state - size of state = size of probability + size of output block
 	RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
+	// TODO serialize whole thing?
+	RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
 
 	// Encode symbol
 	void AddSymbol(uint16_t symbol);
@@ -54,6 +77,8 @@ public:
 
 	// this isn't really const...
 	const std::vector<uint8_t> GetCompressedBlocks();
+	uint64_t GetRansState();
+	bool HasData();
 
 private:
 	uint64_t probabilityRange;

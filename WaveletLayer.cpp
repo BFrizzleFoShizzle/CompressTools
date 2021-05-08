@@ -64,18 +64,49 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
 
     // process parent layer
     assert(parentReserveCount == parentVals.size());
-    if (GetParentWidth() > 1 && GetParentHeight() > 1)
+    if (!IsRoot())
     {
         std::cout << "Processing parent..." << std::endl;
         parent = std::make_shared<WaveletLayer>(parentVals, GetParentWidth(), GetParentHeight());
     }
 }
 
-WaveletLayer::WaveletLayer(std::vector<uint16_t> wavelets, std::vector<uint16_t> parentVals, uint32_t width, uint32_t height)
-    : wavelets(wavelets), parentVals(parentVals), width(width), height(height), parent(nullptr)
+
+WaveletLayer::WaveletLayer(const std::vector<uint16_t> &pyramidWavelets, std::vector<uint16_t> rootParentVals, uint32_t width, uint32_t height)
+    : wavelets(), width(width), height(height)
 {
-    assert(wavelets.size() == width * height);
-    assert(parentVals.size() == GetParentWidth() * GetParentHeight());
+    // reconstruct parent tree
+    if (!IsRoot())
+    {
+        std::cout << "Processing parent..." << std::endl;
+        parent = std::make_shared<WaveletLayer>(pyramidWavelets, rootParentVals, GetParentWidth(), GetParentHeight());
+    }
+    else
+    {
+        // We're the root, parent vals are for us
+        parentVals = rootParentVals;
+    }
+
+    // sum of wavelets used by parent layers
+    // (used to get index of child wavelets)
+    uint64_t parentWaveletCounts = 0;
+    std::shared_ptr<WaveletLayer> parentLayer = parent;
+    while (parentLayer)
+    {
+        parentWaveletCounts += parentLayer->GetWidth() * parentLayer->GetHeight();
+        parentLayer = parentLayer->GetParentLayer();
+    }
+
+    // copy layer wavelets
+    uint64_t waveletsCount = GetWidth() * GetHeight();
+    uint64_t readIdx = pyramidWavelets.size() - (parentWaveletCounts + waveletsCount);
+    wavelets.insert(wavelets.end(), pyramidWavelets.begin() + readIdx, pyramidWavelets.begin() + readIdx + waveletsCount);
+
+    if (!IsRoot())
+    {
+        std::cout << "Decoding parent... " << std::endl;
+        parentVals = parent->DecodeLayer();
+    }
 }
 
 uint32_t WaveletLayer::GetParentWidth() const
@@ -156,4 +187,9 @@ std::vector<uint16_t> WaveletLayer::DecodeLayer() const
         }
     }
     return output;
+}
+
+bool WaveletLayer::IsRoot() const
+{
+    return !(GetParentWidth() > 1 && GetParentHeight() > 1);
 }

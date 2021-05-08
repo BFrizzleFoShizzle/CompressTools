@@ -2,21 +2,47 @@
 #include <unordered_map>
 #include <assert.h>
 #include <iostream>
+#include <algorithm>
 
 #include "RansEncode.h"
 
 // Ported from my old Python implementation
 
+// helper for deterministic entropy sorting
+bool EntropyLess(const SymbolCount& count1, const SymbolCount& count2)
+{
+	if (count1.count != count2.count)
+		return count1.count > count2.count;
+	else
+		return count1.symbol < count2.symbol;
+}
+
+std::vector<SymbolCount> EntropySortSymbols(SymbolCountDict dict)
+{
+	// Convert to vector so we can sort by entropy, resulting in consistant ordering
+	std::vector<SymbolCount> countsVec;
+	for (auto symbolCount : dict)
+	{
+		countsVec.emplace_back(symbolCount.first, symbolCount.second);
+	}
+
+	std::sort(countsVec.begin(), countsVec.end(), EntropyLess);
+
+	std::cout << countsVec[0].count << " " << countsVec.back().count << std::endl;
+
+	return std::move(countsVec);
+}
+
 RansTable::RansTable(SymbolCountDict counts)
 {
 	uint32_t cumulativeCount = 0;
-	// TODO rANS runs faster if you sort by highest probability
-	for (auto symbolCount : counts)
+	std::vector<SymbolCount> sortedCounts = EntropySortSymbols(counts);
+	for (auto symbolCount : sortedCounts)
 	{
-		RansEntry ransEntry = RansEntry(symbolCount.first, symbolCount.second, cumulativeCount);
-		symbolTable.emplace(symbolCount.first, ransEntry);
+		RansEntry ransEntry = RansEntry(symbolCount.symbol, symbolCount.count, cumulativeCount);
+		symbolTable.emplace(symbolCount.symbol, ransEntry);
 		cdfTable.push_back(ransEntry);
-		cumulativeCount += symbolCount.second;
+		cumulativeCount += symbolCount.count;
 	}
 }
 
@@ -47,30 +73,33 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 	blockSize = 1 << outputBlockSize;
 	stateMin = probabilityRange;
 	stateMax = (stateMin * blockSize) - 1;
+	// TODO move elsewhere?
+	std::vector<SymbolCount> sortedSymbolCounts = EntropySortSymbols(counts);
 	std::cout << "Counting symbols..." << std::endl;
 	// Step 1: convert to quantized probabilities
 	uint64_t countsSum = 0;
-	for (const auto symbolCount : counts)
+	for (const auto symbolCount : sortedSymbolCounts)
 	{
-		countsSum += symbolCount.second;
+		countsSum += symbolCount.count;
 	}
 	std::cout << "Generating quantized symbols..." << std::endl;
 	uint64_t quantizedCountsSum = 0;
 	// TODO this will probably fail if quantized probabilites overflow 32-bits
 	SymbolCountDict quantizedCounts;
-	for (auto symbolCount : counts)
+	for (auto symbolCount : sortedSymbolCounts)
 	{
 		// TODO check for integer overflow
-		uint64_t newCount = (symbolCount.second*probabilityRange) / countsSum;
+		uint64_t newCount = (symbolCount.count*probabilityRange) / countsSum;
 		newCount = std::max(1ull, newCount);
-		quantizedCounts.emplace(symbolCount.first, newCount);
+		quantizedCounts.emplace(symbolCount.symbol, newCount);
 		quantizedCountsSum += newCount;
 	}
 
+	if (quantizedCountsSum > probabilityRange)
+		std::cout << "Fixing probability underflow..." << std::endl;
 	// SUPER ineffient way of dealing with overflowing probabilities
 	while (quantizedCountsSum > probabilityRange)
 	{
-		std::cout << "Fixing probability underflow..." << std::endl;
 		double smallestError = probabilityRange;
 		uint32_t smallestErrorSymbol = -1;
 		for (auto quantizedCount : quantizedCounts)
@@ -109,10 +138,11 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 		quantizedCountsSum -= 1;
 	}
 
+	if (quantizedCountsSum < probabilityRange)
+		std::cout << "Fixing probability overflow..." << std::endl;
 	// SUPER ineffient way of dealing with overflowing probabilities
 	while (quantizedCountsSum < probabilityRange)
 	{
-		std::cout << "Fixing probability overflow..." << std::endl;
 		double biggestGain = 0;
 		uint32_t biggestGainSymbol = -1;
 		for (auto quantizedCount : quantizedCounts)
@@ -137,6 +167,14 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 	ransTable = RansTable(quantizedCounts);
 	// You can technically set initial rANS state to anything, but I choose the min. val
 	ransState = stateMin;
+}
+
+// initialize for decoding
+RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
+	: RansState(probabilityRes, counts, outputBlockSize)
+{
+	this->compressedBlocks = compressedBlocks;
+	this->ransState = ransState;
 }
 
 // Encode symbol
@@ -182,6 +220,9 @@ uint16_t RansState::ReadSymbol()
 		compressedBlocks.pop_back();
 	}
 
+	if (newState < stateMin)
+		std::cerr << "rANS underflow!" << std::endl;
+
 	// Done!
 	ransState = newState;
 	return entry.symbol;
@@ -190,4 +231,20 @@ uint16_t RansState::ReadSymbol()
 const std::vector<uint8_t> RansState::GetCompressedBlocks()
 {
 	return compressedBlocks;
+}
+
+
+uint64_t RansState::GetRansState()
+{
+	return ransState;
+}
+
+
+bool RansState::HasData()
+{
+	if (compressedBlocks.size() > 0)
+		return true;
+	if (ransState != stateMin)
+		return true;
+	return false;
 }
