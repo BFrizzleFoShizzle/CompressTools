@@ -24,12 +24,18 @@
     <ClCompile Include="WaveletLayer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="CompressedImage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RansEncode.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="WaveletLayer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CompressedImage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -85,11 +85,13 @@
     <ProjectReference />
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CompressedImage.cpp" />
     <ClCompile Include="CompressTools.cpp" />
     <ClCompile Include="RansEncode.cpp" />
     <ClCompile Include="WaveletLayer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CompressedImage.h" />
     <ClInclude Include="RansEncode.h" />
     <ClInclude Include="WaveletLayer.h" />
   </ItemGroup>
