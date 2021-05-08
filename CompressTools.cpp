@@ -309,85 +309,8 @@ int main()
         values.resize(width * height);
         memcpy(&values[0], bytes, width * height * sizeof(uint16_t));
         
-        std::cout << "Getting uncompressed/raw symbol counts..." << std::endl;
-        SymbolCountDict initialSymbolCounts = GenerateSymbolCountDictionary(values);
-        std::cout << "Generating initial rANS state..." << std::endl;
-        // rANS encode - 24-bit probability, 8-bit blocks
-        RansState ransState(24, initialSymbolCounts, 8);
-        std::cout << "rANS encoding values..." << std::endl;
-        for(auto value : values)
-            ransState.AddSymbol(value);
-        std::cout << "Encoded bytes: " << ransState.GetCompressedBlocks().size() << std::endl;
-        std::cout << "Getting initial entropy..." << std::endl;
-        GetSymbolEntropy(values);
         std::cout << "Getting compressed entropy..." << std::endl;
         std::shared_ptr<WaveletLayer> bottomLayer = std::make_shared<WaveletLayer>(values, width, height);
-        /*
-        std::shared_ptr<WaveletLayer> waveletLayer = bottomLayer;
-
-        std::vector<std::shared_ptr<WaveletLayer>> waveletLayers;
-        waveletLayers.push_back(waveletLayer);
-        // Queue up wavelet layers
-        while (waveletLayer->GetParentLayer() != nullptr)
-        {
-            waveletLayer = waveletLayer->GetParentLayer();
-            waveletLayers.push_back(waveletLayer);
-        }
-        // Decode pyramid
-        std::vector<uint16_t> parentVals = waveletLayer->GetParentVals();
-        while (waveletLayers.size() > 0)
-        {
-            std::cout << "Decompressing layer..." << std::endl;
-            std::shared_ptr<WaveletLayer> currLayer = waveletLayers.back();
-            // TODO does this do a copy?
-            const std::vector<uint16_t> wavelets = currLayer->GetWavelets();
-            std::shared_ptr<WaveletLayer> reconstructedLayer = std::make_shared<WaveletLayer>(wavelets, parentVals, currLayer->GetWidth(), currLayer->GetHeight());
-
-            std::vector<uint16_t> decodedValues = reconstructedLayer->DecodeLayer();
-
-            // pass decoded vals down to next layer
-            parentVals = std::move(decodedValues);
-            waveletLayers.pop_back();
-        }
-        std::cout << values.size() << " " << parentVals.size() << std::endl;
-        // this is now the child values
-        std::cout << "Checking decoded values..." << std::endl;
-        // check wavelet decode is correct
-        for (int i = 0; i < values.size(); ++i)
-        {
-            assert(values[i] == parentVals[i]);
-            if (values[i] != parentVals[i])
-            {
-                std::cout << "Decoded wavelet values at " << i << " did not match." << std::endl;
-            }
-        }
-        std::cout << "Decoded wavelets checked." << std::endl;
-        // smush all the wavelets together (this is bad for compression, but D-Day is tomorrow, haha)
-        std::vector<uint16_t> waveletsToEncode;
-        waveletLayer = bottomLayer;
-        while (waveletLayer->GetParentLayer() != nullptr)
-        {
-            // append
-            const std::vector<uint16_t>& layerWavelets = waveletLayer->GetWavelets();
-            waveletsToEncode.insert(waveletsToEncode.end(), layerWavelets.begin(), layerWavelets.end());
-            waveletLayer = waveletLayer->GetParentLayer();
-        }
-        // finish last element
-        const std::vector<uint16_t>& layerWavelets = waveletLayer->GetWavelets();
-        waveletsToEncode.insert(waveletsToEncode.end(), layerWavelets.begin(), layerWavelets.end());
-
-        // all the wavelets are now in one array
-        std::cout << "Total wavelets: " << waveletsToEncode.size() << std::endl;
-        std::cout << "Getting wavelet symbol counts..." << std::endl;
-        SymbolCountDict waveletSymbolCounts = GenerateSymbolCountDictionary(waveletsToEncode);
-        std::cout << "Generating initial rANS state..." << std::endl;
-        // rANS encode - 24-bit probability, 8-bit blocks
-        RansState waveletRansState(24, waveletSymbolCounts, 8);
-        std::cout << "rANS encoding values..." << std::endl;
-        for (auto value : waveletsToEncode)
-            waveletRansState.AddSymbol(value);
-        std::cout << "Encoded bytes: " << waveletRansState.GetCompressedBlocks().size() << std::endl;
-        */
         std::shared_ptr<CompressedImage> compressedImage = std::make_shared<CompressedImage>(bottomLayer);
         std::vector<uint8_t> imageBytes = compressedImage->Serialize();
         std::cout << "Final encoded bytes: " << imageBytes.size() << std::endl;
