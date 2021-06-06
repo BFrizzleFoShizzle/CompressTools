@@ -13,7 +13,7 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{a07578fc-c3a5-42b9-803b-e8f9c974f584}</ProjectGuid>
+    <ProjectGuid>{D68018E6-6B6E-495A-92E5-B643B5CF37AA}</ProjectGuid>
     <RootNamespace>CompressTools</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
@@ -24,7 +24,7 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
@@ -47,7 +47,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>..\..\ogre-next-deps\build\ogredeps\include;$(IncludePath)</IncludePath>
-    <LibraryPath>..\..\ogre-next-deps\build\ogredeps\lib\Release;$(OutDir);$(LibraryPath)</LibraryPath>
+    <LibraryPath>..\..\ogre-next-deps\build\ogredeps\lib\Release;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -78,15 +78,21 @@
       <SubSystem>Console</SubSystem>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
+      <AdditionalDependencies>FreeImage.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>CompressToolsCore.lib;FreeImage.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ProjectReference />
     <Lib />
-    <ProjectReference />
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="CompressTools.cpp" />
+    <ClCompile Include="CompressedImage.cpp" />
+    <ClCompile Include="RansEncode.cpp" />
+    <ClCompile Include="WaveletLayer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CompressedImage.h" />
+    <ClInclude Include="RansEncode.h" />
+    <ClInclude Include="WaveletLayer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
