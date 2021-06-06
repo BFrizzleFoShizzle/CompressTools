@@ -12,6 +12,7 @@
 #include <cmath>
 #include <assert.h>
 #include <algorithm>
+#include <fstream>
 
 #include "RansEncode.h"
 #include "WaveletLayer.h"
@@ -94,6 +95,19 @@ int main()
             }
         }
         std::cout << "Values checked!" << std::endl;
+
+        // write to disk
+        std::cout << "Writing bytes..." << std::endl;
+        std::ofstream compressedFile("../../../fullmap.cif", std::ios::binary);
+        if (compressedFile.is_open())
+        {
+            compressedFile.write((const char*)&imageBytes[0], imageBytes.size());
+            compressedFile.close();
+        }
+        else
+        {
+            std::cerr << "Error opening output file!";
+        }
     }
     
     FreeImage_Unload(bitmap);
