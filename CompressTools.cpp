@@ -72,12 +72,17 @@ int main()
     {
         std::cout << "Uncompressed size: " << width*height*sizeof(uint16_t) << " bytes" << std::endl;
         std::cout << "Reading pixels..." << std::endl;
-        uint16_t* bytes = (uint16_t*)FreeImage_GetBits(bitmap);
 
         std::vector<uint16_t> values;
         values.resize(width * height);
-        memcpy(&values[0], bytes, width * height * sizeof(uint16_t));
-        
+        // Undo Free_Image transform
+        // Actually tested it properly this time...
+        for (int y = 0; y < height; ++y)
+        {
+            BYTE* bits = FreeImage_GetScanLine(bitmap, (height-1)-y);
+            memcpy(&values[y*width], bits, width * sizeof(uint16_t));
+        }
+
         std::cout << "Getting compressed entropy..." << std::endl;
         std::shared_ptr<WaveletLayer> bottomLayer = std::make_shared<WaveletLayer>(values, width, height);
         std::shared_ptr<CompressedImage> compressedImage = std::make_shared<CompressedImage>(bottomLayer);
