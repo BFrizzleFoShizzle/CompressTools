@@ -63,33 +63,31 @@ RansEntry RansTable::GetSymbolEntryFromFreq(uint32_t prob)
 	assert(false);
 }
 
-// rANS state - size of state = size of probability + size of output block
-RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
-	: ransTable()
+SymbolCountDict GenerateQuantizedCounts(SymbolCountDict unquantizedCounts, size_t probabilityRange)
 {
-	std::cout << "STARTING" << std::endl;
-	// Initialize rANS encoding parameters
-	probabilityRange = 1 << probabilityRes;
-	blockSize = 1 << outputBlockSize;
-	stateMin = probabilityRange;
-	stateMax = (stateMin * blockSize) - 1;
-	// TODO move elsewhere?
-	std::vector<SymbolCount> sortedSymbolCounts = EntropySortSymbols(counts);
-	std::cout << "Counting symbols..." << std::endl;
-	// Step 1: convert to quantized probabilities
 	uint64_t countsSum = 0;
-	for (const auto symbolCount : sortedSymbolCounts)
+	for (const auto symbolCount : unquantizedCounts)
 	{
-		countsSum += symbolCount.count;
+		countsSum += symbolCount.second;
 	}
-	std::cout << "Generating quantized symbols..." << std::endl;
+
+	// already quantized
+	if (countsSum == probabilityRange)
+		return unquantizedCounts;
+
+	// TODO move elsewhere?
+	std::vector<SymbolCount> sortedSymbolCounts = EntropySortSymbols(unquantizedCounts);
+	//std::cout << "Counting symbols..." << std::endl;
+	// Step 1: convert to quantized probabilities
+
+	//std::cout << "Generating quantized symbols..." << std::endl;
 	uint64_t quantizedCountsSum = 0;
 	// TODO this will probably fail if quantized probabilites overflow 32-bits
 	SymbolCountDict quantizedCounts;
 	for (auto symbolCount : sortedSymbolCounts)
 	{
 		// TODO check for integer overflow
-		uint64_t newCount = (symbolCount.count*probabilityRange) / countsSum;
+		uint64_t newCount = (symbolCount.count * probabilityRange) / countsSum;
 		newCount = std::max(1ull, newCount);
 		quantizedCounts.emplace(symbolCount.symbol, newCount);
 		quantizedCountsSum += newCount;
@@ -107,7 +105,7 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 			const uint16_t symbol = quantizedCount.first;
 			// TODO confusing naming
 			const uint32_t quantizedSymbolCount = quantizedCount.second;
-			const uint32_t symbolCount = counts.at(quantizedCount.first);
+			const uint32_t symbolCount = unquantizedCounts.at(quantizedCount.first);
 			// can't reduce a probability to zero
 			if (quantizedCount.second == 1)
 				continue;
@@ -115,7 +113,7 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 			// (TODO This can probably be simplified to something cheap, but D-Day is in 2 days...)
 			double oldProbability = quantizedCount.second;
 			oldProbability /= quantizedCountsSum;
-			double oldEntropy = symbolCount  * -log2(oldProbability);
+			double oldEntropy = symbolCount * -log2(oldProbability);
 			double newProbability = quantizedCount.second - 1;
 			// TODO Should we have a -1 here? Seems sketch...
 			newProbability /= quantizedCountsSum;
@@ -132,7 +130,7 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 		// when subtracting one from it's quantized count/probability
 		// TODO ERROR
 		assert(smallestErrorSymbol != -1);
-			
+
 		// subtract one from probability
 		quantizedCounts[smallestErrorSymbol] -= 1;
 		quantizedCountsSum -= 1;
@@ -161,7 +159,23 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 		quantizedCountsSum += 1;
 	}
 
-	std::cout << "generating rANS table..." << std::endl;
+	return quantizedCounts;
+}
+
+// rANS state - size of state = size of probability + size of output block
+RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
+	: ransTable()
+{
+	//std::cout << "STARTING" << std::endl;
+	// Initialize rANS encoding parameters
+	probabilityRange = 1 << probabilityRes;
+	blockSize = 1 << outputBlockSize;
+	stateMin = probabilityRange;
+	stateMax = (stateMin * blockSize) - 1;
+	
+	SymbolCountDict quantizedCounts = GenerateQuantizedCounts(counts, probabilityRange);
+
+	//std::cout << "generating rANS table..." << std::endl;
 	// Our quantized probabilites now sum to exactly probabilityRange,
 	// which is require for rANS to work
 	ransTable = RansTable(quantizedCounts);
@@ -169,9 +183,30 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 	ransState = stateMin;
 }
 
+// fast constructor
+RansState::RansState(uint32_t probabilityRes, RansTable symbolTable, uint32_t outputBlockSize)
+{
+	// Initialize rANS encoding parameters
+	probabilityRange = 1 << probabilityRes;
+	blockSize = 1 << outputBlockSize;
+	stateMin = probabilityRange;
+	stateMax = (stateMin * blockSize) - 1;
+
+	ransTable = symbolTable;
+	// You can technically set initial rANS state to anything, but I choose the min. val
+	ransState = stateMin;
+}
+
 // initialize for decoding
 RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
 	: RansState(probabilityRes, counts, outputBlockSize)
+{
+	this->compressedBlocks = compressedBlocks;
+	this->ransState = ransState;
+}
+
+RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, RansTable symbolTable, uint32_t outputBlockSize)
+	: RansState(probabilityRes, symbolTable, outputBlockSize)
 {
 	this->compressedBlocks = compressedBlocks;
 	this->ransState = ransState;

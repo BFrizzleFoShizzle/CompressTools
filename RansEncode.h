@@ -8,6 +8,8 @@
 // TODO can we replace this with sorted symbol count vector?
 typedef std::unordered_map<uint16_t, uint32_t> SymbolCountDict;
 
+SymbolCountDict GenerateQuantizedCounts(SymbolCountDict unquantizedCounts, size_t probabilityRange);
+
 // helper struct
 struct SymbolCount
 {
@@ -67,8 +69,11 @@ class RansState
 public:
 	// rANS state - size of state = size of probability + size of output block
 	RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
+	// fast constructor if rANS table is already generated
+	RansState(uint32_t probabilityRes, RansTable symbolTable, uint32_t outputBlockSize);
 	// TODO serialize whole thing?
 	RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
+	RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, RansTable symbolTable, uint32_t outputBlockSize);
 
 	// Encode symbol
 	void AddSymbol(uint16_t symbol);
