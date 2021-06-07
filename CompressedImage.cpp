@@ -6,18 +6,6 @@
 #include <iostream>
 #include <assert.h>
 
-
-// std::hash is garbage
-// roughly adapted from https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector
-std::size_t HashVec(std::vector<uint16_t> const& vec)
-{
-    std::size_t seed = vec.size();
-    for (auto& i : vec) {
-        seed ^= i + 0x9e37 + (seed << 6) + (seed >> 2);
-    }
-    return seed;
-}
-
 SymbolCountDict GenerateSymbolCountDictionary(std::vector<uint16_t> symbols)
 {
     SymbolCountDict symbolCounts;
@@ -28,22 +16,6 @@ SymbolCountDict GenerateSymbolCountDictionary(std::vector<uint16_t> symbols)
     }
     return std::move(symbolCounts);
 }
-
-template<typename T>
-struct VectorHeader
-{
-    VectorHeader()
-        : count(-1)
-    {
-
-    }
-    VectorHeader(const std::vector<T>& values)
-    {
-        count = values.size();
-    }
-    uint64_t count;
-};
-
 CompressedImage::CompressedImage(std::shared_ptr<WaveletLayer> waveletPyramidBottom)
     : waveletPyramidBottom(waveletPyramidBottom)
 {

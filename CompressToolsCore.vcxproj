@@ -87,6 +87,7 @@
   <ItemGroup>
     <ClCompile Include="CompressedImage.cpp" />
     <ClCompile Include="RansEncode.cpp" />
+    <ClCompile Include="Serialize.cpp" />
     <ClCompile Include="WaveletLayer.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -1,5 +1,42 @@
 #pragma once
 
+#include <vector>
+
+// std::hash is garbage
+size_t HashVec(std::vector<uint16_t> const& vec);
+
+// TODO refactor other serialization functions to use these
+template<typename T>
+void WriteValue(std::vector<uint8_t>& outputBytes, T value)
+{
+    size_t writePos = outputBytes.size();
+    outputBytes.resize(outputBytes.size() + sizeof(value));
+    memcpy(&outputBytes[writePos], &value, sizeof(value));
+}
+
+template<typename T>
+T ReadValue(const std::vector<uint8_t>& inputBytes, uint64_t& readPos)
+{
+    T value;
+    memcpy(&value, &inputBytes[readPos], sizeof(value));
+    readPos += sizeof(value);
+    return value;
+}
+
+template<typename T>
+struct VectorHeader
+{
+    VectorHeader()
+        : count(-1)
+    {
+
+    }
+    VectorHeader(const std::vector<T>& values)
+    {
+        count = values.size();
+    }
+    uint64_t count;
+};
 
 // helper function
 template<typename T>
