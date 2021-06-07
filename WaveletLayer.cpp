@@ -4,12 +4,12 @@
 #include <assert.h>
 
 WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_t height)
-    : width(width), height(height)
+    : size(width, height)
 {
     assert(values.size() == width * height);
     //  Initialize + prealloc memory
     wavelets.resize(width * height);
-    uint32_t parentReserveCount = GetParentHeight() * GetParentWidth();
+    uint32_t parentReserveCount = size.GetParentHeight() * size.GetParentWidth();
     parentVals.resize(parentReserveCount);
 
     std::cout << "Generating wavelets from layer..." << std::endl;
@@ -44,7 +44,7 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
             // set parent value
             uint32_t parentX = x / 2;
             uint32_t parentY = y / 2;
-            parentVals[parentY * GetParentWidth() + parentX] = average;
+            parentVals[parentY * size.GetParentWidth() + parentX] = average;
 
             // get wavelet values
             wavelets[y * width + x] = values[y * width + x] - average;
@@ -67,19 +67,19 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
     if (!IsRoot())
     {
         std::cout << "Processing parent..." << std::endl;
-        parent = std::make_shared<WaveletLayer>(parentVals, GetParentWidth(), GetParentHeight());
+        parent = std::make_shared<WaveletLayer>(parentVals, size.GetParentWidth(), size.GetParentHeight());
     }
 }
 
 
 WaveletLayer::WaveletLayer(const std::vector<uint16_t> &pyramidWavelets, std::vector<uint16_t> rootParentVals, uint32_t width, uint32_t height)
-    : wavelets(), width(width), height(height)
+    : wavelets(), size(width, height)
 {
     // reconstruct parent tree
     if (!IsRoot())
     {
         std::cout << "Processing parent..." << std::endl;
-        parent = std::make_shared<WaveletLayer>(pyramidWavelets, rootParentVals, GetParentWidth(), GetParentHeight());
+        parent = std::make_shared<WaveletLayer>(pyramidWavelets, rootParentVals, size.GetParentWidth(), size.GetParentHeight());
     }
     else
     {
@@ -109,34 +109,30 @@ WaveletLayer::WaveletLayer(const std::vector<uint16_t> &pyramidWavelets, std::ve
     }
 }
 
-uint32_t WaveletLayer::GetParentWidth() const
-{
-    return (width + 1) / 2;
-}
 
-uint32_t WaveletLayer::GetParentHeight() const
+WaveletLayer::WaveletLayer(std::shared_ptr<WaveletLayer> parent, const std::vector<uint16_t>& layerWavelets, uint32_t width, uint32_t height)
+    : parent(parent), parentVals(parent->DecodeLayer()), size(width, height)
 {
-    return (height + 1) / 2;
+    // TODO std::move?
+    wavelets = layerWavelets;
 }
-
 
 uint32_t WaveletLayer::GetWidth() const
 {
-    return width;
+    return size.GetWidth();
 }
 
 uint32_t WaveletLayer::GetHeight() const
 {
-    return height;
+    return size.GetHeight();
 }
-
 
 uint16_t WaveletLayer::DecodeAt(uint32_t x, uint32_t y) const
 {
     uint32_t parentX = x / 2;
     uint32_t parentY = y / 2;
-    uint16_t predicted = parentVals[parentY * GetParentWidth() + parentX];
-    uint16_t wavelet = wavelets[y * width + x];
+    uint16_t predicted = parentVals[parentY * size.GetParentWidth() + parentX];
+    uint16_t wavelet = wavelets[y * size.GetWidth() + x];
     uint16_t decoded = predicted + wavelet;
     return decoded;
 }
@@ -159,37 +155,68 @@ const std::vector<uint16_t> WaveletLayer::GetWavelets() const
 std::vector<uint16_t> WaveletLayer::DecodeLayer() const
 {
     std::vector<uint16_t> output;
-    output.resize(width * height);
+    output.resize(size.GetWidth() * size.GetHeight());
 
     auto currWavelet = wavelets.begin();
 
     // TODO this can be rearranged to run faster
-    for (uint32_t y = 0; y < height; y += 2)
+    for (uint32_t y = 0; y < size.GetHeight(); y += 2)
     {
-        for (uint32_t x = 0; x < width; x += 2)
+        for (uint32_t x = 0; x < size.GetWidth(); x += 2)
         {
             uint32_t parentX = x / 2;
             uint32_t parentY = y / 2;
             // get prediction/parent value
-            uint16_t predicted = parentVals[parentY * GetParentWidth() + parentX];
+            uint16_t predicted = parentVals[parentY * size.GetParentWidth() + parentX];
 
             // add wavelet to get final value
-            output[y * width + x] = predicted + currWavelet[y * width + x];
+            output[y * size.GetWidth() + x] = predicted + currWavelet[y * size.GetWidth() + x];
 
-            if (x + 1 < width)
-                output[y * width + x + 1] = predicted + wavelets[y * width + x + 1];
+            if (x + 1 < size.GetWidth())
+                output[y * size.GetWidth() + x + 1] = predicted + wavelets[y * size.GetWidth() + x + 1];
 
-            if (y + 1 < height)
-                output[(y + 1) * width + x] = predicted + wavelets[(y + 1) * width + x];
+            if (y + 1 < size.GetHeight())
+                output[(y + 1) * size.GetWidth() + x] = predicted + wavelets[(y + 1) * size.GetWidth() + x];
 
-            if (x + 1 < width && y + 1 < height)
-                output[(y + 1) * width + x + 1] = predicted + wavelets[(y + 1) * width + x + 1];
+            if (x + 1 < size.GetWidth() && y + 1 < size.GetHeight())
+                output[(y + 1) * size.GetWidth() + x + 1] = predicted + wavelets[(y + 1) * size.GetWidth() + x + 1];
         }
     }
     return output;
 }
 
 bool WaveletLayer::IsRoot() const
+{
+    return size.IsRoot();
+}
+
+WaveletLayerSize::WaveletLayerSize(uint32_t width, uint32_t height)
+    : width(width), height(height)
+{
+
+}
+
+uint32_t WaveletLayerSize::GetHeight() const
+{
+    return height;
+}
+
+uint32_t  WaveletLayerSize::GetWidth() const
+{
+    return width;
+}
+
+uint32_t WaveletLayerSize::GetParentHeight() const
+{
+    return (height + 1) / 2;
+}
+
+uint32_t  WaveletLayerSize::GetParentWidth() const
+{
+    return (width + 1) / 2;
+}
+
+bool WaveletLayerSize::IsRoot() const
 {
     return !(GetParentWidth() > 1 && GetParentHeight() > 1);
 }

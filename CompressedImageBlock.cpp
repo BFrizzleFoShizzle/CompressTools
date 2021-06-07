@@ -63,9 +63,42 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, si
 
     //std::reverse(wavelets.begin(), wavelets.end());
 
-    // TODO ALSO HAVE TO REVERSE LAYERS
+    WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
 
-    waveletPyramidBottom = std::make_shared<WaveletLayer>(wavelets, header.parentVals, header.width, header.height);
+    std::vector<WaveletLayerSize> waveletLayerSizes;
+    waveletLayerSizes.push_back(size);
+    while (!size.IsRoot())
+    {
+        size = WaveletLayerSize(size.GetParentWidth(), size.GetParentHeight());
+        waveletLayerSizes.push_back(size);
+    }
+
+    // root first
+    std::reverse(waveletLayerSizes.begin(), waveletLayerSizes.end());
+
+    // root layer - special logic
+    std::vector<uint16_t> rootWavelets;
+    rootWavelets.resize(waveletLayerSizes[0].GetWidth() * waveletLayerSizes[0].GetHeight());
+    memcpy(&rootWavelets[0], &wavelets[0], rootWavelets.size() * sizeof(uint16_t));
+    std::shared_ptr<WaveletLayer> currLayer = std::make_shared<WaveletLayer>(rootWavelets, header.parentVals, waveletLayerSizes[0].GetWidth(), waveletLayerSizes[0].GetHeight());
+    // remove root from sizes
+    waveletLayerSizes.erase(waveletLayerSizes.begin());
+
+    // All layers below root
+    size_t waveletIndex = rootWavelets.size();
+    for (auto layerSize : waveletLayerSizes)
+    {
+        // get layer wavelets
+        std::vector<uint16_t> layerWavelets;
+        layerWavelets.resize(layerSize.GetWidth() * layerSize.GetHeight());
+        memcpy(&layerWavelets[0], &wavelets[waveletIndex], layerWavelets.size() * sizeof(uint16_t));
+        waveletIndex += layerWavelets.size();
+
+        // create layer object
+        currLayer = std::make_shared<WaveletLayer>(currLayer, layerWavelets, layerSize.GetWidth(), layerSize.GetHeight());
+    }
+
+    waveletPyramidBottom = currLayer;
 }
 
 std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
@@ -79,9 +112,9 @@ std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
         topLayer = topLayer->GetParentLayer();
         waveletLayers.push_back(topLayer);
     }
+
     // Top-layer first
-    // TODO ADD BACK IN
-    //std::reverse(waveletLayers.begin(), waveletLayers.end());
+    std::reverse(waveletLayers.begin(), waveletLayers.end());
 
     // Combine wavelet vector
     std::vector<uint16_t> blockWavelets;
