@@ -5,7 +5,6 @@
 // std::hash is garbage
 size_t HashVec(std::vector<uint16_t> const& vec);
 
-// TODO refactor other serialization functions to use these
 template<typename T>
 void WriteValue(std::vector<uint8_t>& outputBytes, T value)
 {
@@ -45,8 +44,7 @@ void WriteVector(std::vector<uint8_t>& outputBytes, const std::vector<T>& vector
     uint64_t writePos = outputBytes.size();
     // write header
     VectorHeader<T> vectorHeader = VectorHeader<T>(vector);
-    outputBytes.resize(outputBytes.size() + sizeof(vectorHeader));
-    memcpy(&outputBytes[writePos], &vectorHeader, sizeof(vectorHeader));
+    WriteValue(outputBytes, vectorHeader);
 
     // write vector values
     writePos = outputBytes.size();
@@ -60,9 +58,7 @@ template<typename T>
 std::vector<T> ReadVector(const std::vector<uint8_t>& inputBytes, uint64_t& readPos)
 {
     // read header
-    VectorHeader<T> vectorHeader;
-    memcpy(&vectorHeader, &inputBytes[readPos], sizeof(vectorHeader));
-    readPos += sizeof(vectorHeader);
+    VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(inputBytes, readPos);
 
     // read vector values
     std::vector<T> outputVector;
