@@ -83,9 +83,9 @@ int main()
             memcpy(&values[y*width], bits, width * sizeof(uint16_t));
         }
 
-        std::cout << "Getting compressed entropy..." << std::endl;
-        std::shared_ptr<WaveletLayer> bottomLayer = std::make_shared<WaveletLayer>(values, width, height);
-        std::shared_ptr<CompressedImage> compressedImage = std::make_shared<CompressedImage>(bottomLayer);
+        std::cout << "Generating wavelet image..." << std::endl;
+        std::shared_ptr<CompressedImage> compressedImage = std::make_shared<CompressedImage>(values, width, height, 128);
+        std::cout << "Serializing..." << std::endl; 
         std::vector<uint8_t> imageBytes = compressedImage->Serialize();
         std::cout << "Final encoded bytes: " << imageBytes.size() << std::endl;
         std::shared_ptr<CompressedImage> decodedImage = CompressedImage::Deserialize(imageBytes);

@@ -210,44 +210,6 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
     image->header = header;
     image->globalSymbolCounts = std::move(waveletSymbolCounts);
 
-    /*
-    // read header
-    std::cout << "Reading CompressedImage header..." << std::endl;
-    CompressedImageHeader header;
-    memcpy(&header, &bytes[0], sizeof(header));
-    assert(header.IsCorrect());
-    if (!header.IsCorrect())
-        std::cerr << "Image header validation failed in CompressedImage::Deserialize()" << std::endl;
-
-    uint64_t readPos = sizeof(header);
-
-    // read top-level parent values
-    std::vector<uint16_t> rootParentVals = ReadVector<uint16_t>(bytes, readPos);
-
-    // read symbol counts
-    SymbolCountDict waveletSymbolCounts = ReadSymbolTable(bytes, readPos);
-
-    // read rANS-encoded wavelets
-    std::cout << "Reading compressed wavelets..." << std::endl;
-    std::vector<uint8_t> ransWavelets = ReadVector<uint8_t>(bytes, readPos);
-    std::cout << "Compressed wavelets bytes: " << ransWavelets.size() << std::endl;
-
-    std::vector<uint16_t> wavelets;
-    std::cout << "Initializing rANS decoder..." << std::endl;
-    RansState ransState = RansState(ransWavelets, header.finalRansState, 24, waveletSymbolCounts, 8);
-    std::cout << "Decompressing wavelets..." << std::endl;
-    while (ransState.HasData())
-        wavelets.emplace_back(ransState.ReadSymbol());
-    // TODO rANS decompresses backwards, there are faster solutions to this
-    std::reverse(wavelets.begin(), wavelets.end());
-
-    std::cout << "Decompressed wavelets: " << wavelets.size() << std::endl;
-
-    // reconstruct/decode wavelet pyramid
-    std::shared_ptr<WaveletLayer> bottomLayer = std::make_shared<WaveletLayer>(wavelets, rootParentVals, header.width, header.height);
-    std::shared_ptr<CompressedImage> image = std::make_shared<CompressedImage>(bottomLayer);
-    return std::move(image);
-    */
     return std::move(image);
 }
 

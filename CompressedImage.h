@@ -38,7 +38,6 @@ public:
     // TODO remove
     CompressedImage() {};
     CompressedImage(const std::vector<uint16_t>& values, size_t width, size_t height, size_t blockSize);
-    //CompressedImage(std::shared_ptr<WaveletLayer> waveletPyramidBottom);
     static std::shared_ptr<CompressedImage> Deserialize(const std::vector<uint8_t>& bytes);
     std::vector<uint8_t> Serialize();
     std::vector<uint16_t> GetBottomLevelPixels();
