@@ -12,8 +12,6 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
     uint32_t parentReserveCount = size.GetParentHeight() * size.GetParentWidth();
     parentVals.resize(parentReserveCount);
 
-    std::cout << "Generating wavelets from layer..." << std::endl;
-
     for (uint32_t y = 0; y < height; y += 2)
     {
         for (uint32_t x = 0; x < width; x += 2)
@@ -59,14 +57,12 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
         }
     }
 
-    std::cout << "Level wavelets generated." << std::endl;
     //GetSymbolEntropy(layer->wavelets);
 
     // process parent layer
     assert(parentReserveCount == parentVals.size());
     if (!IsRoot())
     {
-        std::cout << "Processing parent..." << std::endl;
         parent = std::make_shared<WaveletLayer>(parentVals, size.GetParentWidth(), size.GetParentHeight());
     }
 }
