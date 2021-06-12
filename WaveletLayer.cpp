@@ -12,48 +12,36 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
     uint32_t parentReserveCount = size.GetParentHeight() * size.GetParentWidth();
     parentVals.resize(parentReserveCount);
 
+    auto currWavelet = wavelets.begin();
+
     for (uint32_t y = 0; y < height; y += 2)
     {
         for (uint32_t x = 0; x < width; x += 2)
         {
-            // get prediction/parent value
-            uint32_t sum = values[y * width + x];
-            uint32_t numVals = 1;
-            if (x + 1 < width)
-            {
-                sum += values[y * width + x + 1];
-                numVals += 1;
-            }
-            if (y + 1 < height)
-            {
-                sum += values[(y + 1) * width + x];
-                numVals += 1;
-            }
-            if (x + 1 < width && y + 1 < height)
-            {
-                sum += values[(y + 1) * width + x + 1];
-                numVals += 1;
-            }
-            // fix rounding
-            // TODO test + improve this
-            sum += numVals / 2;
-            uint16_t average = (sum / numVals);
-
             // set parent value
             uint32_t parentX = x / 2;
             uint32_t parentY = y / 2;
-            parentVals[parentY * size.GetParentWidth() + parentX] = average;
+            uint16_t parent = values[y * width + x];
+            uint16_t predicted = values[y * width + x];
+            parentVals[parentY * size.GetParentWidth() + parentX] = parent;
 
-            // get wavelet values
-            wavelets[y * width + x] = values[y * width + x] - average;
             if (x + 1 < width)
-                wavelets[y * width + x + 1] = values[y * width + x + 1] - average;
+            {
+                *currWavelet = values[y * width + x + 1] - predicted;
+                ++currWavelet;
+            }
 
             if (y + 1 < height)
-                wavelets[(y + 1) * width + x] = values[(y + 1) * width + x] - average;
+            {
+                *currWavelet = values[(y + 1) * width + x] - predicted;
+                ++currWavelet;
+            }
 
             if (x + 1 < width && y + 1 < height)
-                wavelets[(y + 1) * width + x + 1] = values[(y + 1) * width + x + 1] - average;
+            {
+                *currWavelet = values[(y + 1) * width + x + 1] - predicted;
+                ++currWavelet;
+            }
         }
     }
 
@@ -127,7 +115,8 @@ uint32_t WaveletLayer::GetWaveletCount() const
 {
     return size.GetWaveletCount();
 }
-
+// TODO
+/*
 uint16_t WaveletLayer::DecodeAt(uint32_t x, uint32_t y) const
 {
     uint32_t parentX = x / 2;
@@ -137,7 +126,7 @@ uint16_t WaveletLayer::DecodeAt(uint32_t x, uint32_t y) const
     uint16_t decoded = predicted + wavelet;
     return decoded;
 }
-
+*/
 std::shared_ptr<WaveletLayer> WaveletLayer::GetParentLayer() const
 {
     return parent;
@@ -168,19 +157,30 @@ std::vector<uint16_t> WaveletLayer::DecodeLayer() const
             uint32_t parentX = x / 2;
             uint32_t parentY = y / 2;
             // get prediction/parent value
-            uint16_t predicted = parentVals[parentY * size.GetParentWidth() + parentX];
+            uint16_t parent = parentVals[parentY * size.GetParentWidth() + parentX];
+            uint16_t predicted = parent;
+
+            // Parent transform is TL, so no wavelet needed
+            output[y * size.GetWidth() + x] = predicted;
 
             // add wavelet to get final value
-            output[y * size.GetWidth() + x] = predicted + currWavelet[y * size.GetWidth() + x];
-
             if (x + 1 < size.GetWidth())
-                output[y * size.GetWidth() + x + 1] = predicted + wavelets[y * size.GetWidth() + x + 1];
+            {
+                output[y * size.GetWidth() + x + 1] = predicted + *currWavelet;
+                ++currWavelet;
+            }
 
             if (y + 1 < size.GetHeight())
-                output[(y + 1) * size.GetWidth() + x] = predicted + wavelets[(y + 1) * size.GetWidth() + x];
+            {
+                output[(y + 1) * size.GetWidth() + x] = predicted + *currWavelet;
+                ++currWavelet;
+            }
 
             if (x + 1 < size.GetWidth() && y + 1 < size.GetHeight())
-                output[(y + 1) * size.GetWidth() + x + 1] = predicted + wavelets[(y + 1) * size.GetWidth() + x + 1];
+            {
+                output[(y + 1) * size.GetWidth() + x + 1] = predicted + *currWavelet;
+                ++currWavelet;
+            }
         }
     }
     return output;
@@ -209,7 +209,7 @@ uint32_t  WaveletLayerSize::GetWidth() const
 
 uint32_t WaveletLayerSize::GetWaveletCount() const
 {
-    return width * height;
+    return (width * height) - (GetParentWidth() * GetParentHeight());
 }
 
 uint32_t WaveletLayerSize::GetParentHeight() const
