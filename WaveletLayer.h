@@ -13,6 +13,7 @@ public:
     uint32_t GetParentHeight() const;
     uint32_t GetWidth() const;
     uint32_t GetHeight() const;
+    uint32_t GetWaveletCount() const;
     bool IsRoot() const;
 
 private:
@@ -36,6 +37,7 @@ public:
     const std::vector<uint16_t> GetParentVals() const;
     uint32_t GetWidth() const;
     uint32_t GetHeight() const;
+    uint32_t GetWaveletCount() const;
     std::shared_ptr<WaveletLayer> GetParentLayer() const;
 
 private:

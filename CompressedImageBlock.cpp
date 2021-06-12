@@ -86,7 +86,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
     if (decodedLevel == -1)
     {
         WaveletLayerSize rootSize = waveletLayerSizes.back();
-        size_t waveletsCount = rootSize.GetHeight() * rootSize.GetWidth();
+        size_t waveletsCount = rootSize.GetWaveletCount();
 
         // read wavelets
         std::vector<uint16_t> rootWavelets;
@@ -114,7 +114,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
         }
 
         WaveletLayerSize newLayerSize = waveletLayerSizes[newLevel];
-        size_t waveletsCount = newLayerSize.GetHeight() * newLayerSize.GetWidth();
+        size_t waveletsCount = newLayerSize.GetWaveletCount();
         
         // read wavelets
         std::vector<uint16_t> wavelets;

@@ -8,7 +8,7 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
 {
     assert(values.size() == width * height);
     //  Initialize + prealloc memory
-    wavelets.resize(width * height);
+    wavelets.resize(size.GetWaveletCount());
     uint32_t parentReserveCount = size.GetParentHeight() * size.GetParentWidth();
     parentVals.resize(parentReserveCount);
 
@@ -93,12 +93,12 @@ WaveletLayer::WaveletLayer(const std::vector<uint16_t> &pyramidWavelets, std::ve
     std::shared_ptr<WaveletLayer> parentLayer = parent;
     while (parentLayer)
     {
-        parentWaveletCounts += parentLayer->GetWidth() * parentLayer->GetHeight();
+        parentWaveletCounts += parentLayer->GetWaveletCount();
         parentLayer = parentLayer->GetParentLayer();
     }
 
     // copy layer wavelets
-    uint64_t waveletsCount = GetWidth() * GetHeight();
+    uint64_t waveletsCount = GetWaveletCount();
     uint64_t readIdx = pyramidWavelets.size() - (parentWaveletCounts + waveletsCount);
     wavelets.insert(wavelets.end(), pyramidWavelets.begin() + readIdx, pyramidWavelets.begin() + readIdx + waveletsCount);
 
@@ -125,6 +125,11 @@ uint32_t WaveletLayer::GetWidth() const
 uint32_t WaveletLayer::GetHeight() const
 {
     return size.GetHeight();
+}
+
+uint32_t WaveletLayer::GetWaveletCount() const
+{
+    return size.GetWaveletCount();
 }
 
 uint16_t WaveletLayer::DecodeAt(uint32_t x, uint32_t y) const
@@ -204,6 +209,11 @@ uint32_t WaveletLayerSize::GetHeight() const
 uint32_t  WaveletLayerSize::GetWidth() const
 {
     return width;
+}
+
+uint32_t WaveletLayerSize::GetWaveletCount() const
+{
+    return width * height;
 }
 
 uint32_t WaveletLayerSize::GetParentHeight() const
