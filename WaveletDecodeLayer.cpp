@@ -52,6 +52,29 @@ std::vector<uint16_t> WaveletDecodeLayer::GetPixels() const
     return pixelVals;
 }
 
+// does inverse parent transform to get parent values
+std::vector<uint16_t> WaveletDecodeLayer::GetParentLevelPixels(uint32_t level) const
+{
+    WaveletLayerSize targetSize = size;
+    for (int i = 0; i < level; ++i)
+        targetSize = targetSize.GetParentSize();
+
+    std::vector<uint16_t> parentVals;
+    parentVals.resize(targetSize.GetPixelCount());
+    size_t shift = 1 << level;
+    for (uint32_t y = 0; y < targetSize.GetHeight(); ++y)
+    {
+        for (uint32_t x = 0; x < targetSize.GetWidth(); ++x)
+        {
+            uint32_t parentX = x << level;
+            uint32_t parentY = y << level;
+            parentVals[y * targetSize.GetWidth() + x] = pixelVals[parentY * GetWidth() + parentX];
+        }
+    }
+
+    return parentVals;
+}
+
 uint32_t WaveletDecodeLayer::GetWidth() const
 {
     return size.GetWidth();

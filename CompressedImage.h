@@ -41,6 +41,8 @@ public:
     std::vector<uint8_t> Serialize();
     std::vector<uint16_t> GetBottomLevelPixels();
 
+    uint16_t GetPixel(size_t x, size_t y);
+
 private:
     CompressedImageHeader header;
     std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<CompressedImageBlock>> compressedImageBlocks;

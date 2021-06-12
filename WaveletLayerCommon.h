@@ -11,8 +11,10 @@ public:
     // TODO check
     uint32_t GetParentWidth() const;
     uint32_t GetParentHeight() const;
+    WaveletLayerSize GetParentSize() const;
     uint32_t GetWidth() const;
     uint32_t GetHeight() const;
+    uint32_t GetPixelCount() const;
     uint32_t GetWaveletCount() const;
     bool IsRoot() const;
 

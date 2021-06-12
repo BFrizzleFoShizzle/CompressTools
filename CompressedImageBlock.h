@@ -42,11 +42,16 @@ public:
     void WriteBody(std::vector<uint8_t>& outputBytes, const std::shared_ptr<RansTable>& globalSymbolTable);
 
     std::vector<uint16_t> GetLevelPixels(uint32_t level);
+    uint16_t GetPixel(uint32_t x, uint32_t y);
     std::vector<uint16_t> GetBottomLevelPixels();
 
     CompressedImageBlockHeader GetHeader();
 
 private:
+    // decodes down to layer, does nothing if already at/below layer
+    // returns current level after decode
+    uint32_t DecodeToLevel(uint32_t targetLevel);
+
     CompressedImageBlockHeader header;
     // TODO remove this and stream in data
     RansState ransState;

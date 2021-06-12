@@ -52,7 +52,7 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, si
     ransState = RansState(rANSBytes, header.finalRansState, 24, symbolTable, 8);
 }
 
-std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
+uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
 {
     // Generate layer sizes
     WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
@@ -61,7 +61,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
     waveletLayerSizes.push_back(size);
     while (!size.IsRoot())
     {
-        size = WaveletLayerSize(size.GetParentWidth(), size.GetParentHeight());
+        size = size.GetParentSize();
         waveletLayerSizes.push_back(size);
     }
 
@@ -100,7 +100,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
 
 
     // if we haven't decoded the level yet, decode
-    while (decodedLevel > level)
+    while (decodedLevel > targetLevel)
     {
         uint32_t newLevel = decodedLevel - 1;
 
@@ -109,7 +109,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
         if (!ransState.IsValid() && ransState.HasData())
         {
             std::cout << "Decode requested, but rANS is unhappy!" << std::endl;
-            return std::vector<uint16_t>();
+            return -1;
         }
 
         WaveletLayerSize newLayerSize = waveletLayerSizes[newLevel];
@@ -123,7 +123,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
         if (wavelets.size() != waveletsCount)
         {
             std::cout << "Wrong number of wavelets decoded!" << std::endl;
-            return std::vector<uint16_t>();
+            return -1;
         }
 
         // create layer object
@@ -132,17 +132,25 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
         decodedLevel = newLevel;
     }
 
-    // too far down, need to get parent values
-    if (decodedLevel < level)
+
+    return decodedLevel;
+}
+
+std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
+{
+    uint32_t currLevel = DecodeToLevel(level);
+    
+    // error-handling
+    assert(currLevel != -1);
+
+    if (currLevel == level)
     {
-        std::cout << "Requested LOD is above decoded LOD!" << std::endl;
-        return std::vector<uint16_t>();
+        return currDecodeLayer->GetPixels();
     }
-
-    // should now be at correct LOD
-    assert(decodedLevel == level);
-
-    return currDecodeLayer->GetPixels();
+    else
+    {
+        return currDecodeLayer->GetParentLevelPixels(level - currLevel);
+    }
 }
 
 std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
@@ -206,6 +214,74 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
 std::vector<uint16_t> CompressedImageBlock::GetBottomLevelPixels()
 {
     return GetLevelPixels(0);
+}
+
+
+uint16_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
+{
+    // Generate layer sizes
+    WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
+
+    std::vector<WaveletLayerSize> waveletLayerSizes;
+    waveletLayerSizes.push_back(size);
+    while (!size.IsRoot())
+    {
+        size = WaveletLayerSize(size.GetParentWidth(), size.GetParentHeight());
+        waveletLayerSizes.push_back(size);
+    }
+
+    // level of parent values
+    uint32_t rootLevel = waveletLayerSizes.size();
+
+    // Check what level we're on
+    // -1 = no layer decoded
+    uint32_t decodedLevel = -1;
+    if (currDecodeLayer)
+    {
+        ++decodedLevel;
+        for (WaveletLayerSize size : waveletLayerSizes)
+        {
+            if (size.GetHeight() == currDecodeLayer->GetHeight()
+                && size.GetHeight() == currDecodeLayer->GetWidth())
+                break;
+            ++decodedLevel;
+        }
+    }
+    else
+    {
+        // not decoded, only have root values
+        decodedLevel = rootLevel;
+    }
+
+    // shuffle coordinate up to our level, or as high as possible
+    uint32_t positionLevel = 0;
+    uint32_t shiftedX = x;
+    uint32_t shiftedY = y;
+    while (positionLevel != decodedLevel && (shiftedX & 1) == 0 && (shiftedY & 1) == 0)
+    {
+        shiftedX = shiftedX >> 1;
+        shiftedY = shiftedY >> 1;
+        ++positionLevel;
+    }
+
+    // special case - value is root parent value
+    if (positionLevel == rootLevel)
+    {
+        uint32_t parentValIdx = shiftedY * waveletLayerSizes.back().GetParentWidth() + x;
+        return header.parentVals[parentValIdx];
+    }
+
+    if (positionLevel == decodedLevel)
+    {
+        return currDecodeLayer->GetPixelAt(shiftedX, shiftedY);
+    }
+    else
+    {
+        // have to decode...
+        decodedLevel = DecodeToLevel(positionLevel);
+        assert(decodedLevel == positionLevel);
+        return currDecodeLayer->GetPixelAt(shiftedX, shiftedY);
+    }
 }
 
 void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)

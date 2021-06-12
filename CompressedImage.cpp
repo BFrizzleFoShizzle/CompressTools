@@ -241,3 +241,16 @@ std::vector<uint16_t> CompressedImage::GetBottomLevelPixels()
 
     return pixels;
 }
+
+
+uint16_t CompressedImage::GetPixel(size_t x, size_t y)
+{
+    uint32_t blockX = x / header.blockSize;
+    uint32_t blockY = y / header.blockSize;
+    uint32_t subBlockX = x % header.blockSize;
+    uint32_t subBlockY = y % header.blockSize;
+
+    std::shared_ptr<CompressedImageBlock> block = compressedImageBlocks.at(std::make_pair(blockY, blockX));
+
+    return block->GetPixel(subBlockX, subBlockY);
+}

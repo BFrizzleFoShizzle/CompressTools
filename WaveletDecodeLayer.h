@@ -10,6 +10,7 @@ public:
     uint16_t GetPixelAt(uint32_t x, uint32_t y) const;
     // TODO is this actually const?
     std::vector<uint16_t> GetPixels() const;
+    std::vector<uint16_t> GetParentLevelPixels(uint32_t level) const;
     uint32_t GetWidth() const;
     uint32_t GetHeight() const;
 

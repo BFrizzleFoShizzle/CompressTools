@@ -17,9 +17,20 @@ uint32_t  WaveletLayerSize::GetWidth() const
     return width;
 }
 
+
+uint32_t WaveletLayerSize::GetPixelCount() const
+{
+    return width * height;
+}
+
 uint32_t WaveletLayerSize::GetWaveletCount() const
 {
-    return (width * height) - (GetParentWidth() * GetParentHeight());
+    return GetPixelCount() - (GetParentSize().GetPixelCount());
+}
+
+WaveletLayerSize WaveletLayerSize::GetParentSize() const
+{
+    return WaveletLayerSize(GetParentWidth(), GetParentHeight());
 }
 
 uint32_t WaveletLayerSize::GetParentHeight() const
