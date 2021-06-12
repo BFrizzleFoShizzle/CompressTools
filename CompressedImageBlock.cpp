@@ -53,31 +53,9 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, si
     ransState = RansState(rANSBytes, header.finalRansState, 24, symbolTable, 8);
 }
 
-void CompressedImageBlock::Decode()
+std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
 {
-    // TODO check this properly
-    if (waveletPyramidBottom)
-        return;
-
-    if (!ransState.IsValid())
-    {
-        return;
-    }
-    
-    std::vector<uint16_t> wavelets;
-    while (ransState.HasData())
-        wavelets.emplace_back(ransState.ReadSymbol());
-
-
-    // TODO put this back in
-    /*
-    size_t waveletsHash = HashVec(wavelets);
-    if (waveletsHash != bodyHeader.hash)
-    {
-        std::cout << "Block hash mismatch!" << std::endl;
-    }
-    */
-
+    // Generate layer sizes
     WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
 
     std::vector<WaveletLayerSize> waveletLayerSizes;
@@ -88,32 +66,84 @@ void CompressedImageBlock::Decode()
         waveletLayerSizes.push_back(size);
     }
 
-    // root first
-    std::reverse(waveletLayerSizes.begin(), waveletLayerSizes.end());
-
-    // root layer - special logic
-    std::vector<uint16_t> rootWavelets;
-    rootWavelets.resize(waveletLayerSizes[0].GetWidth() * waveletLayerSizes[0].GetHeight());
-    memcpy(&rootWavelets[0], &wavelets[0], rootWavelets.size() * sizeof(uint16_t));
-    std::shared_ptr<WaveletLayer> currLayer = std::make_shared<WaveletLayer>(rootWavelets, header.parentVals, waveletLayerSizes[0].GetWidth(), waveletLayerSizes[0].GetHeight());
-    // remove root from sizes
-    waveletLayerSizes.erase(waveletLayerSizes.begin());
-
-    // All layers below root
-    size_t waveletIndex = rootWavelets.size();
-    for (auto layerSize : waveletLayerSizes)
+    // Check what level we're on
+    // -1 = no layer decoded
+    uint32_t decodedLevel = -1;
+    if (waveletPyramidBottom)
     {
-        // get layer wavelets
-        std::vector<uint16_t> layerWavelets;
-        layerWavelets.resize(layerSize.GetWidth() * layerSize.GetHeight());
-        memcpy(&layerWavelets[0], &wavelets[waveletIndex], layerWavelets.size() * sizeof(uint16_t));
-        waveletIndex += layerWavelets.size();
+        ++decodedLevel;
+        for (WaveletLayerSize size : waveletLayerSizes)
+        {
+            if (size.GetHeight() == waveletPyramidBottom->GetHeight()
+                && size.GetHeight() == waveletPyramidBottom->GetWidth())
+                break;
+            ++decodedLevel;
+        }
+    }
+    
+    // Special case - root layer
+    // TODO try and refactor this out
+    if (decodedLevel == -1)
+    {
+        WaveletLayerSize rootSize = waveletLayerSizes.back();
+        size_t waveletsCount = rootSize.GetHeight() * rootSize.GetWidth();
 
-        // create layer object
-        currLayer = std::make_shared<WaveletLayer>(currLayer, layerWavelets, layerSize.GetWidth(), layerSize.GetHeight());
+        // read wavelets
+        std::vector<uint16_t> rootWavelets;
+        while (ransState.HasData() && rootWavelets.size() < waveletsCount)
+            rootWavelets.emplace_back(ransState.ReadSymbol());
+        
+        // create root layer
+        waveletPyramidBottom = std::make_shared<WaveletLayer>(rootWavelets, header.parentVals, rootSize.GetWidth(), rootSize.GetHeight());
+        
+        decodedLevel = waveletLayerSizes.size() - 1;
     }
 
-    waveletPyramidBottom = currLayer;
+
+    // if we haven't decoded the level yet, decode
+    while (decodedLevel > level)
+    {
+        uint32_t newLevel = decodedLevel - 1;
+
+        // error-checking
+        assert(newLevel < waveletLayerSizes.size());
+        if (!ransState.IsValid() && ransState.HasData())
+        {
+            std::cout << "Decode requested, but rANS is unhappy!" << std::endl;
+            return std::vector<uint16_t>();
+        }
+
+        WaveletLayerSize newLayerSize = waveletLayerSizes[newLevel];
+        size_t waveletsCount = newLayerSize.GetHeight() * newLayerSize.GetWidth();
+        
+        // read wavelets
+        std::vector<uint16_t> wavelets;
+        while (ransState.HasData() && wavelets.size() < waveletsCount)
+            wavelets.emplace_back(ransState.ReadSymbol());
+
+        if (wavelets.size() != waveletsCount)
+        {
+            std::cout << "Wrong number of wavelets decoded!" << std::endl;
+            return std::vector<uint16_t>();
+        }
+
+        // create layer object
+        waveletPyramidBottom = std::make_shared<WaveletLayer>(waveletPyramidBottom, wavelets, newLayerSize.GetWidth(), newLayerSize.GetHeight());
+        
+        decodedLevel = newLevel;
+    }
+
+    // too far down, need to get parent values
+    if (decodedLevel < level)
+    {
+        std::cout << "Requested LOD is above decoded LOD!" << std::endl;
+        return std::vector<uint16_t>();
+    }
+
+    // should now be at correct LOD
+    assert(decodedLevel == level);
+
+    return waveletPyramidBottom->DecodeLayer();
 }
 
 std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
@@ -176,8 +206,7 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
 
 std::vector<uint16_t> CompressedImageBlock::GetBottomLevelPixels()
 {
-    Decode();
-    return waveletPyramidBottom->DecodeLayer();
+    return GetLevelPixels(0);
 }
 
 void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
