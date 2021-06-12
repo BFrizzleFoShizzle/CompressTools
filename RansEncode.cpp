@@ -162,6 +162,12 @@ SymbolCountDict GenerateQuantizedCounts(SymbolCountDict unquantizedCounts, size_
 	return quantizedCounts;
 }
 
+RansState::RansState()
+	: probabilityRange(0), blockSize(0), stateMax(0), stateMin(0), ransState(0)
+{
+
+}
+
 // rANS state - size of state = size of probability + size of output block
 RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
 	: ransTable()
@@ -178,13 +184,13 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 	//std::cout << "generating rANS table..." << std::endl;
 	// Our quantized probabilites now sum to exactly probabilityRange,
 	// which is require for rANS to work
-	ransTable = RansTable(quantizedCounts);
+	ransTable = std::make_shared<RansTable>(quantizedCounts);
 	// You can technically set initial rANS state to anything, but I choose the min. val
 	ransState = stateMin;
 }
 
 // fast constructor
-RansState::RansState(uint32_t probabilityRes, RansTable symbolTable, uint32_t outputBlockSize)
+RansState::RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
 {
 	// Initialize rANS encoding parameters
 	probabilityRange = 1 << probabilityRes;
@@ -205,7 +211,7 @@ RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, 
 	this->ransState = ransState;
 }
 
-RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, RansTable symbolTable, uint32_t outputBlockSize)
+RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
 	: RansState(probabilityRes, symbolTable, outputBlockSize)
 {
 	this->compressedBlocks = compressedBlocks;
@@ -215,7 +221,7 @@ RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, 
 // Encode symbol
 void RansState::AddSymbol(uint16_t symbol)
 {
-	RansEntry entry = ransTable.GetSymbolEntry(symbol);
+	RansEntry entry = ransTable->GetSymbolEntry(symbol);
 
 	// renormalize if necessary
 	while (ransState >= blockSize * (stateMin / probabilityRange) * entry.count)
@@ -239,7 +245,7 @@ uint16_t RansState::ReadSymbol()
 	// TODO consistant naming
 	// TODO this can be a bitwise AND
 	uint64_t cumulativeProb = ransState % probabilityRange;
-	RansEntry entry = ransTable.GetSymbolEntryFromFreq(cumulativeProb);
+	RansEntry entry = ransTable->GetSymbolEntryFromFreq(cumulativeProb);
 	// TODO can use bit shift
 	uint64_t newState = ransState / probabilityRange;
 	newState = newState * entry.count;
@@ -282,4 +288,23 @@ bool RansState::HasData()
 	if (ransState != stateMin)
 		return true;
 	return false;
+}
+
+
+bool RansState::IsValid()
+{
+	bool valid = true;
+
+	// check min/max are different
+	valid = valid && stateMin < stateMax;
+
+	// check state is between min/max values
+	valid = valid && stateMin <= ransState && stateMax >= ransState;
+
+	// check rANS state is large enough
+	valid = valid && std::numeric_limits<uint64_t>::max() / probabilityRange > blockSize;
+
+	// TODO table checks?
+
+	return valid;
 }

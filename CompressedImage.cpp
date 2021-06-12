@@ -106,7 +106,7 @@ std::vector<uint8_t> CompressedImage::Serialize()
     size_t probabilityRes = 24;
     size_t probabilityRange = 1 << probabilityRes;
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(globalSymbolCounts, probabilityRange);
-    RansTable globalSymbolTable = RansTable(quantizedCounts);
+    std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
     // Write block bodies + generate headers
     size_t blockHeaderPos = byteStream.size();
@@ -165,7 +165,7 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
     size_t probabilityRes = 24;
     size_t probabilityRange = 1 << probabilityRes;
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(waveletSymbolCounts, probabilityRange);
-    RansTable globalSymbolTable = RansTable(quantizedCounts);
+    std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
     // read block headers
     std::vector<CompressedImageBlockHeader> headers;

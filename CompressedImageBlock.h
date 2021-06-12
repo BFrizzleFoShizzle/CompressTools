@@ -36,9 +36,10 @@ class CompressedImageBlock
 {
 public:
     CompressedImageBlock(std::vector<uint16_t> pixelVals, uint32_t width, uint32_t height);
-    CompressedImageBlock(CompressedImageBlockHeader header, size_t bodiesStart, const std::vector<uint8_t> &bytes, RansTable symbolTable);
+    CompressedImageBlock(CompressedImageBlockHeader header, size_t bodiesStart, const std::vector<uint8_t> &bytes, std::shared_ptr<RansTable> symbolTable);
+    void Decode();
     std::vector<uint16_t> GetWaveletValues();
-    void WriteBody(std::vector<uint8_t>& outputBytes, const RansTable& globalSymbolTable);
+    void WriteBody(std::vector<uint8_t>& outputBytes, const std::shared_ptr<RansTable>& globalSymbolTable);
     
     std::vector<uint16_t> GetBottomLevelPixels();
 
@@ -46,5 +47,7 @@ public:
 
 private:
     CompressedImageBlockHeader header;
+    // TODO remove this and stream in data
+    RansState ransState;
     std::shared_ptr<WaveletLayer> waveletPyramidBottom;
 };

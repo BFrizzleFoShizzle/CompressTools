@@ -67,13 +67,15 @@ private:
 class RansState
 {
 public:
+	RansState();
 	// rANS state - size of state = size of probability + size of output block
 	RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
 	// fast constructor if rANS table is already generated
-	RansState(uint32_t probabilityRes, RansTable symbolTable, uint32_t outputBlockSize);
+	RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize);
 	// TODO serialize whole thing?
 	RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
-	RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, RansTable symbolTable, uint32_t outputBlockSize);
+	// fast constructor if rANS table is already generated
+	RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize);
 
 	// Encode symbol
 	void AddSymbol(uint16_t symbol);
@@ -85,6 +87,9 @@ public:
 	uint64_t GetRansState();
 	bool HasData();
 
+	// true if initialized properly
+	bool IsValid();
+
 private:
 	uint64_t probabilityRange;
 	uint64_t blockSize;
@@ -92,5 +97,6 @@ private:
 	uint64_t stateMax;
 	uint64_t ransState;
 	std::vector<uint8_t> compressedBlocks;
-	RansTable ransTable;
+	// so we can reuse one hunk of memory
+	std::shared_ptr<RansTable> ransTable;
 };

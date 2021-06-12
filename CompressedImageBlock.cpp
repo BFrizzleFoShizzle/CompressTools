@@ -34,7 +34,7 @@ struct BlockBodyHeader
     size_t hash;
 };
 
-CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, size_t bodiesStart, const std::vector<uint8_t>& bytes, RansTable symbolTable)
+CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, size_t bodiesStart, const std::vector<uint8_t>& bytes, std::shared_ptr<RansTable> symbolTable)
     : header(header)
 {
     size_t readPos = bodiesStart + header.GetBlockPos();
@@ -50,18 +50,33 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, si
     }
 
     //std::cout << rANSBytes.size() << " Bytes read" << std::endl;
-    RansState ransState = RansState(rANSBytes, header.finalRansState, 24, symbolTable, 8);
+    ransState = RansState(rANSBytes, header.finalRansState, 24, symbolTable, 8);
+}
+
+void CompressedImageBlock::Decode()
+{
+    // TODO check this properly
+    if (waveletPyramidBottom)
+        return;
+
+    if (!ransState.IsValid())
+    {
+        return;
+    }
+    
     std::vector<uint16_t> wavelets;
     while (ransState.HasData())
         wavelets.emplace_back(ransState.ReadSymbol());
 
+
+    // TODO put this back in
+    /*
     size_t waveletsHash = HashVec(wavelets);
     if (waveletsHash != bodyHeader.hash)
     {
         std::cout << "Block hash mismatch!" << std::endl;
     }
-
-    //std::reverse(wavelets.begin(), wavelets.end());
+    */
 
     WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
 
@@ -128,7 +143,7 @@ std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
 }
 
 // Writes body of block - everything needed to decode layers below root
-void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const RansTable & globalSymbolTable)
+void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const std::shared_ptr<RansTable> & globalSymbolTable)
 {
     // add header
     size_t headerPos = outputBytes.size();
@@ -140,17 +155,17 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const Ra
     // TODO error-checking
     size_t waveletsHash = HashVec(blockWavelets);
     // rANS encode - 24-bit probability, 8-bit blocks
-    RansState waveletRansState(24, globalSymbolTable, 8);
+    std::shared_ptr<RansState> waveletRansState = std::make_shared<RansState>(24, globalSymbolTable, 8);
     // rANS decodes backwards
     std::reverse(blockWavelets.begin(), blockWavelets.end());
     //std::cout << "Starting rANS encode..." << std::endl;
     for (auto value : blockWavelets)
-        waveletRansState.AddSymbol(value);
-    header.finalRansState = waveletRansState.GetRansState();
+        waveletRansState->AddSymbol(value);
+    header.finalRansState = waveletRansState->GetRansState();
     //std::cout << "finsihed rANS encode..." << std::endl;
 
     // write rANS encoded wavelets
-    const std::vector<uint8_t>& ransEncondedWavelets = waveletRansState.GetCompressedBlocks();
+    const std::vector<uint8_t>& ransEncondedWavelets = waveletRansState->GetCompressedBlocks();
     WriteVector(outputBytes, ransEncondedWavelets);
 
     // write header
@@ -161,6 +176,7 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const Ra
 
 std::vector<uint16_t> CompressedImageBlock::GetBottomLevelPixels()
 {
+    Decode();
     return waveletPyramidBottom->DecodeLayer();
 }
 
