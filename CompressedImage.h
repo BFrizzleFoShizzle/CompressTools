@@ -43,6 +43,9 @@ public:
 
     uint16_t GetPixel(size_t x, size_t y);
 
+    uint32_t GetWidth() const;
+    uint32_t GetHeight() const;
+
 private:
     CompressedImageHeader header;
     std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<CompressedImageBlock>> compressedImageBlocks;

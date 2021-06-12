@@ -254,3 +254,13 @@ uint16_t CompressedImage::GetPixel(size_t x, size_t y)
 
     return block->GetPixel(subBlockX, subBlockY);
 }
+
+uint32_t CompressedImage::GetWidth() const
+{
+    return header.width;
+}
+
+uint32_t CompressedImage::GetHeight() const
+{
+    return header.height;
+}

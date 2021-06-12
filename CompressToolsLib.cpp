@@ -11,7 +11,7 @@ using namespace CompressToolsLib;
 struct CompressToolsLib::CompressedImageFile
 {
 	std::string filename;
-	std::vector<uint16_t> pixels;
+	std::shared_ptr<CompressedImage> image;
 };
 
 __declspec(dllexport) CompressedImageFileHdl CompressToolsLib::OpenImage(const char* filename)
@@ -34,21 +34,18 @@ __declspec(dllexport) CompressedImageFileHdl CompressToolsLib::OpenImage(const c
 
 	// decode
 	MessageBoxA(0, "Decoding...", "Debug", MB_OK);
-	std::shared_ptr<CompressedImage> decodedImage = CompressedImage::Deserialize(fileBytes);
-	std::vector<uint16_t> decodedPixels = decodedImage->GetBottomLevelPixels();
-
-	// move data to struct
-	MessageBoxA(0, "Generating struct...", "Debug", MB_OK);
 	CompressedImageFileHdl imageHdl = new CompressedImageFile();
 	imageHdl->filename = filename;
-	imageHdl->pixels = std::move(decodedPixels);
+	imageHdl->image = CompressedImage::Deserialize(fileBytes);
+
 	MessageBoxA(0, "Heightmap loaded!", "Debug", MB_OK);
 	return imageHdl;
 }
 
-__declspec(dllexport) uint16_t CompressToolsLib::ReadHeightValue(CompressedImageFileHdl image, uint32_t pixelIndex)
+__declspec(dllexport) uint16_t CompressToolsLib::ReadHeightValue(CompressedImageFileHdl image, uint32_t x, uint32_t y)
 {
-	if (pixelIndex >= image->pixels.size())
+	if (x >= image->image->GetWidth()
+		|| y >= image->image->GetHeight())
 	{
 		//MessageBoxA(0, "Out-of-bounds pixel read!", "Debug", MB_OK);
 		//std::stringstream msg;
@@ -56,11 +53,10 @@ __declspec(dllexport) uint16_t CompressToolsLib::ReadHeightValue(CompressedImage
 		//MessageBoxA(0, msg.str().c_str(), "Debug", MB_OK);
 		return 0;
 	}
-	return image->pixels[pixelIndex];
+	return image->image->GetPixel(x, y);
 }
 
 __declspec(dllexport) void CompressToolsLib::CloseImage(CompressedImageFileHdl image)
 {
-	image->pixels.clear();
 	delete image;
 }
