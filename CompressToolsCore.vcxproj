@@ -89,14 +89,18 @@
     <ClCompile Include="CompressedImageBlock.cpp" />
     <ClCompile Include="RansEncode.cpp" />
     <ClCompile Include="Serialize.cpp" />
-    <ClCompile Include="WaveletLayer.cpp" />
+    <ClCompile Include="WaveletDecodeLayer.cpp" />
+    <ClCompile Include="WaveletEncodeLayer.cpp" />
+    <ClCompile Include="WaveletLayerCommon.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CompressedImage.h" />
     <ClInclude Include="CompressedImageBlock.h" />
     <ClInclude Include="RansEncode.h" />
     <ClInclude Include="Serialize.h" />
-    <ClInclude Include="WaveletLayer.h" />
+    <ClInclude Include="WaveletDecodeLayer.h" />
+    <ClInclude Include="WaveletEncodeLayer.h" />
+    <ClInclude Include="WaveletLayerCommon.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

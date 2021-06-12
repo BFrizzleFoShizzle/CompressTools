@@ -1,5 +1,4 @@
 #include "CompressedImageBlock.h"
-#include "WaveletLayer.h"
 #include "Serialize.h"
 
 #include <iostream>
@@ -21,9 +20,9 @@ struct CompressedImageBlockHeader::BlockHeaderHeader
 
 CompressedImageBlock::CompressedImageBlock(std::vector<uint16_t> pixelVals, uint32_t width, uint32_t height)
 {
-    waveletPyramidBottom = std::make_shared<WaveletLayer>(pixelVals, width, height);
+    encodeWaveletPyramidBottom = std::make_shared<WaveletEncodeLayer>(pixelVals, width, height);
     // get top layer
-    std::shared_ptr<WaveletLayer> topLayer = waveletPyramidBottom;
+    std::shared_ptr<WaveletEncodeLayer> topLayer = encodeWaveletPyramidBottom;
     while (topLayer->GetParentLayer() != nullptr)
         topLayer = topLayer->GetParentLayer();
     header = CompressedImageBlockHeader(topLayer->GetParentVals(), width, height);
@@ -69,13 +68,13 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
     // Check what level we're on
     // -1 = no layer decoded
     uint32_t decodedLevel = -1;
-    if (waveletPyramidBottom)
+    if (currDecodeLayer)
     {
         ++decodedLevel;
         for (WaveletLayerSize size : waveletLayerSizes)
         {
-            if (size.GetHeight() == waveletPyramidBottom->GetHeight()
-                && size.GetHeight() == waveletPyramidBottom->GetWidth())
+            if (size.GetHeight() == currDecodeLayer->GetHeight()
+                && size.GetHeight() == currDecodeLayer->GetWidth())
                 break;
             ++decodedLevel;
         }
@@ -94,7 +93,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
             rootWavelets.emplace_back(ransState.ReadSymbol());
         
         // create root layer
-        waveletPyramidBottom = std::make_shared<WaveletLayer>(rootWavelets, header.parentVals, rootSize.GetWidth(), rootSize.GetHeight());
+        currDecodeLayer = std::make_shared<WaveletDecodeLayer>(rootWavelets, header.parentVals, rootSize.GetWidth(), rootSize.GetHeight());
         
         decodedLevel = waveletLayerSizes.size() - 1;
     }
@@ -128,7 +127,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
         }
 
         // create layer object
-        waveletPyramidBottom = std::make_shared<WaveletLayer>(waveletPyramidBottom, wavelets, newLayerSize.GetWidth(), newLayerSize.GetHeight());
+        currDecodeLayer = std::make_shared<WaveletDecodeLayer>(wavelets, currDecodeLayer->GetPixels(), newLayerSize.GetWidth(), newLayerSize.GetHeight());
         
         decodedLevel = newLevel;
     }
@@ -143,14 +142,14 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
     // should now be at correct LOD
     assert(decodedLevel == level);
 
-    return waveletPyramidBottom->DecodeLayer();
+    return currDecodeLayer->GetPixels();
 }
 
 std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
 {
     // Get wavelet layers
-    std::shared_ptr<WaveletLayer> topLayer = waveletPyramidBottom;
-    std::vector<std::shared_ptr<WaveletLayer>> waveletLayers;
+    std::shared_ptr<WaveletEncodeLayer> topLayer = encodeWaveletPyramidBottom;
+    std::vector<std::shared_ptr<WaveletEncodeLayer>> waveletLayers;
     waveletLayers.push_back(topLayer);
     while (topLayer->GetParentLayer() != nullptr)
     {

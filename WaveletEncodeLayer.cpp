@@ -1,9 +1,10 @@
 
-#include "WaveletLayer.h"
+#include "WaveletEncodeLayer.h"
+
 #include <iostream>
 #include <assert.h>
 
-WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_t height)
+WaveletEncodeLayer::WaveletEncodeLayer(std::vector<uint16_t> values, uint32_t width, uint32_t height)
     : size(width, height)
 {
     assert(values.size() == width * height);
@@ -51,19 +52,19 @@ WaveletLayer::WaveletLayer(std::vector<uint16_t> values, uint32_t width, uint32_
     assert(parentReserveCount == parentVals.size());
     if (!IsRoot())
     {
-        parent = std::make_shared<WaveletLayer>(parentVals, size.GetParentWidth(), size.GetParentHeight());
+        parent = std::make_shared<WaveletEncodeLayer>(parentVals, size.GetParentWidth(), size.GetParentHeight());
     }
 }
 
 
-WaveletLayer::WaveletLayer(const std::vector<uint16_t> &pyramidWavelets, std::vector<uint16_t> rootParentVals, uint32_t width, uint32_t height)
+WaveletEncodeLayer::WaveletEncodeLayer(const std::vector<uint16_t>& pyramidWavelets, std::vector<uint16_t> rootParentVals, uint32_t width, uint32_t height)
     : wavelets(), size(width, height)
 {
     // reconstruct parent tree
     if (!IsRoot())
     {
         std::cout << "Processing parent..." << std::endl;
-        parent = std::make_shared<WaveletLayer>(pyramidWavelets, rootParentVals, size.GetParentWidth(), size.GetParentHeight());
+        parent = std::make_shared<WaveletEncodeLayer>(pyramidWavelets, rootParentVals, size.GetParentWidth(), size.GetParentHeight());
     }
     else
     {
@@ -74,7 +75,7 @@ WaveletLayer::WaveletLayer(const std::vector<uint16_t> &pyramidWavelets, std::ve
     // sum of wavelets used by parent layers
     // (used to get index of child wavelets)
     uint64_t parentWaveletCounts = 0;
-    std::shared_ptr<WaveletLayer> parentLayer = parent;
+    std::shared_ptr<WaveletEncodeLayer> parentLayer = parent;
     while (parentLayer)
     {
         parentWaveletCounts += parentLayer->GetWaveletCount();
@@ -93,56 +94,37 @@ WaveletLayer::WaveletLayer(const std::vector<uint16_t> &pyramidWavelets, std::ve
     }
 }
 
-
-WaveletLayer::WaveletLayer(std::shared_ptr<WaveletLayer> parent, const std::vector<uint16_t>& layerWavelets, uint32_t width, uint32_t height)
-    : parent(parent), parentVals(parent->DecodeLayer()), size(width, height)
-{
-    // TODO std::move?
-    wavelets = layerWavelets;
-}
-
-uint32_t WaveletLayer::GetWidth() const
+uint32_t WaveletEncodeLayer::GetWidth() const
 {
     return size.GetWidth();
 }
 
-uint32_t WaveletLayer::GetHeight() const
+uint32_t WaveletEncodeLayer::GetHeight() const
 {
     return size.GetHeight();
 }
 
-uint32_t WaveletLayer::GetWaveletCount() const
+uint32_t WaveletEncodeLayer::GetWaveletCount() const
 {
     return size.GetWaveletCount();
 }
-// TODO
-/*
-uint16_t WaveletLayer::DecodeAt(uint32_t x, uint32_t y) const
-{
-    uint32_t parentX = x / 2;
-    uint32_t parentY = y / 2;
-    uint16_t predicted = parentVals[parentY * size.GetParentWidth() + parentX];
-    uint16_t wavelet = wavelets[y * size.GetWidth() + x];
-    uint16_t decoded = predicted + wavelet;
-    return decoded;
-}
-*/
-std::shared_ptr<WaveletLayer> WaveletLayer::GetParentLayer() const
+
+std::shared_ptr<WaveletEncodeLayer> WaveletEncodeLayer::GetParentLayer() const
 {
     return parent;
 }
 
-const std::vector<uint16_t> WaveletLayer::GetParentVals() const
+const std::vector<uint16_t> WaveletEncodeLayer::GetParentVals() const
 {
     return parentVals;
 }
 
-const std::vector<uint16_t> WaveletLayer::GetWavelets() const
+const std::vector<uint16_t> WaveletEncodeLayer::GetWavelets() const
 {
     return wavelets;
 }
 
-std::vector<uint16_t> WaveletLayer::DecodeLayer() const
+std::vector<uint16_t> WaveletEncodeLayer::DecodeLayer() const
 {
     std::vector<uint16_t> output;
     output.resize(size.GetWidth() * size.GetHeight());
@@ -186,43 +168,7 @@ std::vector<uint16_t> WaveletLayer::DecodeLayer() const
     return output;
 }
 
-bool WaveletLayer::IsRoot() const
+bool WaveletEncodeLayer::IsRoot() const
 {
     return size.IsRoot();
-}
-
-WaveletLayerSize::WaveletLayerSize(uint32_t width, uint32_t height)
-    : width(width), height(height)
-{
-
-}
-
-uint32_t WaveletLayerSize::GetHeight() const
-{
-    return height;
-}
-
-uint32_t  WaveletLayerSize::GetWidth() const
-{
-    return width;
-}
-
-uint32_t WaveletLayerSize::GetWaveletCount() const
-{
-    return (width * height) - (GetParentWidth() * GetParentHeight());
-}
-
-uint32_t WaveletLayerSize::GetParentHeight() const
-{
-    return (height + 1) / 2;
-}
-
-uint32_t  WaveletLayerSize::GetParentWidth() const
-{
-    return (width + 1) / 2;
-}
-
-bool WaveletLayerSize::IsRoot() const
-{
-    return !(GetParentWidth() > 1 && GetParentHeight() > 1);
 }

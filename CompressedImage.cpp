@@ -1,6 +1,5 @@
 #include "CompressedImage.h"
 
-#include "WaveletLayer.h"
 #include "Serialize.h"
 
 #include <iostream>

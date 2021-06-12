@@ -2,7 +2,8 @@
 
 #include <vector>
 #include <memory>
-#include "WaveletLayer.h"
+#include "WaveletEncodeLayer.h"
+#include "WaveletDecodeLayer.h"
 #include "RansEncode.h"
 
 class CompressedImageBlock;
@@ -49,5 +50,6 @@ private:
     CompressedImageBlockHeader header;
     // TODO remove this and stream in data
     RansState ransState;
-    std::shared_ptr<WaveletLayer> waveletPyramidBottom;
+    std::shared_ptr<WaveletEncodeLayer> encodeWaveletPyramidBottom;
+    std::shared_ptr<WaveletDecodeLayer> currDecodeLayer;
 };

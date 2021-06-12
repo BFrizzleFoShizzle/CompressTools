@@ -4,7 +4,6 @@
 #include <map>
 
 #include "RansEncode.h"
-#include "WaveletLayer.h"
 #include "CompressedImageBlock.h"
 
 struct CompressedImageHeader

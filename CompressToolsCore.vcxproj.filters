@@ -18,7 +18,7 @@
     <ClCompile Include="RansEncode.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="WaveletLayer.cpp">
+    <ClCompile Include="WaveletDecodeLayer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="CompressedImage.cpp">
@@ -30,21 +30,33 @@
     <ClCompile Include="Serialize.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="WaveletEncodeLayer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WaveletLayerCommon.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="RansEncode.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="WaveletLayer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="CompressedImage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="CompressedImageBlock.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="RansEncode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Serialize.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WaveletDecodeLayer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WaveletEncodeLayer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WaveletLayerCommon.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
