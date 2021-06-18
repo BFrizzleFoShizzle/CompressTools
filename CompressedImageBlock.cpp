@@ -284,6 +284,45 @@ uint16_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
     }
 }
 
+uint32_t CompressedImageBlock::GetLevel()
+{
+    // Generate layer sizes
+    WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
+
+    std::vector<WaveletLayerSize> waveletLayerSizes;
+    waveletLayerSizes.push_back(size);
+    while (!size.IsRoot())
+    {
+        size = WaveletLayerSize(size.GetParentWidth(), size.GetParentHeight());
+        waveletLayerSizes.push_back(size);
+    }
+
+    // level of parent values
+    uint32_t rootLevel = waveletLayerSizes.size();
+
+    // Check what level we're on
+    // -1 = no layer decoded
+    uint32_t decodedLevel = -1;
+    if (currDecodeLayer)
+    {
+        ++decodedLevel;
+        for (WaveletLayerSize size : waveletLayerSizes)
+        {
+            if (size.GetHeight() == currDecodeLayer->GetHeight()
+                && size.GetHeight() == currDecodeLayer->GetWidth())
+                break;
+            ++decodedLevel;
+        }
+    }
+    else
+    {
+        // not decoded, only have root values
+        decodedLevel = rootLevel;
+    }
+
+    return decodedLevel;
+}
+
 void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
 {
     // struct data that can easily be serialized

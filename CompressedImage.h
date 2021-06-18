@@ -41,10 +41,15 @@ public:
     std::vector<uint8_t> Serialize();
     std::vector<uint16_t> GetBottomLevelPixels();
 
+    // returns the level each block is decoded at
+    std::vector<uint8_t> GetBlockLevels();
+
     uint16_t GetPixel(size_t x, size_t y);
 
     uint32_t GetWidth() const;
     uint32_t GetHeight() const;
+    uint32_t GetWidthInBlocks() const;
+    uint32_t GetHeightInBlocks() const;
 
 private:
     CompressedImageHeader header;

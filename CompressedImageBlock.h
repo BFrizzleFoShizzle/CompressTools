@@ -45,6 +45,8 @@ public:
     uint16_t GetPixel(uint32_t x, uint32_t y);
     std::vector<uint16_t> GetBottomLevelPixels();
 
+    uint32_t GetLevel();
+
     CompressedImageBlockHeader GetHeader();
 
 private:

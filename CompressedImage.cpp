@@ -243,6 +243,24 @@ std::vector<uint16_t> CompressedImage::GetBottomLevelPixels()
 }
 
 
+std::vector<uint8_t> CompressedImage::GetBlockLevels()
+{
+    std::vector<uint8_t> blockLevels;
+    for (uint32_t blockStartY = 0; blockStartY < header.height; blockStartY += header.blockSize)
+    {
+        for (uint32_t blockStartX = 0; blockStartX < header.width; blockStartX += header.blockSize)
+        {
+            uint32_t blockX = blockStartX / header.blockSize;
+            uint32_t blockY = blockStartY / header.blockSize;
+
+            std::shared_ptr<CompressedImageBlock> block = compressedImageBlocks.at(std::make_pair(blockY, blockX));
+
+            blockLevels.push_back(block->GetLevel());
+        }
+    }
+    return blockLevels;
+}
+
 uint16_t CompressedImage::GetPixel(size_t x, size_t y)
 {
     uint32_t blockX = x / header.blockSize;
@@ -263,4 +281,20 @@ uint32_t CompressedImage::GetWidth() const
 uint32_t CompressedImage::GetHeight() const
 {
     return header.height;
+}
+
+uint32_t CompressedImage::GetWidthInBlocks() const
+{
+    uint32_t roundedWidth = header.width / header.blockSize;
+    if (header.width % header.blockSize != 0)
+        roundedWidth += 1;
+    return roundedWidth;
+}
+
+uint32_t CompressedImage::GetHeightInBlocks() const
+{
+    uint32_t roundedHeight = header.height / header.blockSize;
+    if (header.height % header.blockSize != 0)
+        roundedHeight += 1;
+    return roundedHeight;
 }

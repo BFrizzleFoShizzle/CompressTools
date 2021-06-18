@@ -12,4 +12,9 @@ namespace CompressToolsLib {
 	__declspec(dllexport) CompressedImageFileHdl OpenImage(const char* filename);
 	__declspec(dllexport) uint16_t ReadHeightValue(CompressedImageFileHdl image, uint32_t x, uint32_t y);
 	__declspec(dllexport) void CloseImage(CompressedImageFileHdl image);
+	// for debugging
+	__declspec(dllexport) void GetBlockLODs(CompressedImageFileHdl image, uint8_t* output);
+	__declspec(dllexport) uint32_t GetImageWidthInBlocks(CompressedImageFileHdl image);
+	__declspec(dllexport) uint32_t GetImageHeightInBlocks(CompressedImageFileHdl image);
+
 }

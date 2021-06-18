@@ -60,3 +60,21 @@ __declspec(dllexport) void CompressToolsLib::CloseImage(CompressedImageFileHdl i
 {
 	delete image;
 }
+
+
+__declspec(dllexport) uint32_t CompressToolsLib::GetImageWidthInBlocks(CompressedImageFileHdl image)
+{
+	return image->image->GetWidthInBlocks();
+}
+
+__declspec(dllexport) uint32_t CompressToolsLib::GetImageHeightInBlocks(CompressedImageFileHdl image)
+{
+	return image->image->GetHeightInBlocks();
+}
+
+// outputs w
+__declspec(dllexport) void CompressToolsLib::GetBlockLODs(CompressedImageFileHdl image, uint8_t* output)
+{
+	std::vector<uint8_t> blockLevels = image->image->GetBlockLevels();
+	memcpy(output, &blockLevels[0], sizeof(uint8_t) * blockLevels.size());
+}
