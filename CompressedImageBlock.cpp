@@ -7,10 +7,6 @@
 // makes serialization easy lmao
 struct CompressedImageBlockHeader::BlockHeaderHeader
 {
-    // TODO possibly not needded?
-    uint32_t width;
-    uint32_t height;
-
     // position of block in stream
     size_t blockPos;
 
@@ -327,8 +323,6 @@ void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
 {
     // struct data that can easily be serialized
     BlockHeaderHeader headerTop;
-    headerTop.width = width;
-    headerTop.height = height;
     headerTop.blockPos = blockPos;
     headerTop.finalRansState = finalRansState;
 
@@ -336,11 +330,11 @@ void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
     WriteVector(outputBytes, parentVals);
 }
 
-CompressedImageBlockHeader CompressedImageBlockHeader::Read(const std::vector<uint8_t>& bytes, size_t &readPos)
+CompressedImageBlockHeader CompressedImageBlockHeader::Read(const std::vector<uint8_t>& bytes, size_t &readPos, uint32_t width, uint32_t height)
 {
     BlockHeaderHeader headerTop = ReadValue<BlockHeaderHeader>(bytes, readPos);
     std::vector<uint16_t> parentVals = ReadVector<uint16_t>(bytes, readPos);
-    return CompressedImageBlockHeader(headerTop, parentVals);
+    return CompressedImageBlockHeader(headerTop, width, height, parentVals);
 }
 
 CompressedImageBlockHeader CompressedImageBlock::GetHeader()
@@ -348,8 +342,8 @@ CompressedImageBlockHeader CompressedImageBlock::GetHeader()
     return header;
 }
 
-CompressedImageBlockHeader::CompressedImageBlockHeader(BlockHeaderHeader header, std::vector<uint16_t> parentVals)
-    : width(header.width), height(header.height), blockPos(header.blockPos), finalRansState(header.finalRansState), parentVals(parentVals)
+CompressedImageBlockHeader::CompressedImageBlockHeader(BlockHeaderHeader header, uint32_t width, uint32_t height, std::vector<uint16_t> parentVals)
+    : width(width), height(height), blockPos(header.blockPos), finalRansState(header.finalRansState), parentVals(parentVals)
 {
 
 }

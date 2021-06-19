@@ -15,11 +15,11 @@ class CompressedImageBlockHeader
 public:
     struct BlockHeaderHeader;
     CompressedImageBlockHeader();
-    CompressedImageBlockHeader(BlockHeaderHeader header, std::vector<uint16_t> parentVals);
+    CompressedImageBlockHeader(BlockHeaderHeader header, uint32_t width, uint32_t height, std::vector<uint16_t> parentVals);
     CompressedImageBlockHeader(CompressedImageBlockHeader header, size_t blockPos);
     CompressedImageBlockHeader(std::vector<uint16_t> parentVals, uint32_t width, uint32_t height);
     void Write(std::vector<uint8_t>& outputBytes);
-    static CompressedImageBlockHeader Read(const std::vector<uint8_t>& bytes, size_t &readPos);
+    static CompressedImageBlockHeader Read(const std::vector<uint8_t>& bytes, size_t &readPos, uint32_t width, uint32_t height);
     size_t GetBlockPos();
 private:
     // TODO possibly not needded?

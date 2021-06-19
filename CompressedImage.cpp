@@ -172,7 +172,9 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
     {
         for (uint32_t blockStartX = 0; blockStartX < header.width; blockStartX += header.blockSize)
         {
-            CompressedImageBlockHeader header = CompressedImageBlockHeader::Read(bytes, readPos);
+            size_t blockW = std::min(header.width - blockStartX, header.blockSize);
+            size_t blockH = std::min(header.height - blockStartY, header.blockSize);
+            CompressedImageBlockHeader header = CompressedImageBlockHeader::Read(bytes, readPos, blockW, blockH);
             headers.push_back(header);
         }
     }
