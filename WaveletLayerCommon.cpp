@@ -47,3 +47,11 @@ bool WaveletLayerSize::IsRoot() const
 {
     return !(GetParentWidth() > 1 && GetParentHeight() > 1);
 }
+
+WaveletLayerSize WaveletLayerSize::GetRoot() const
+{
+    WaveletLayerSize currSize = *this;
+    while (!currSize.IsRoot())
+        currSize = currSize.GetParentSize();
+    return currSize;
+}

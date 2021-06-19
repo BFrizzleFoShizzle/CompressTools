@@ -17,6 +17,7 @@ public:
     uint32_t GetPixelCount() const;
     uint32_t GetWaveletCount() const;
     bool IsRoot() const;
+    WaveletLayerSize GetRoot() const;
 
 private:
     // TODO these can be 16-bit

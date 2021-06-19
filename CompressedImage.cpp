@@ -107,6 +107,34 @@ std::vector<uint8_t> CompressedImage::Serialize()
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(globalSymbolCounts, probabilityRange);
     std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
+    // get parent values
+    std::vector<uint16_t> parentValues;
+    for (auto block : compressedImageBlocks)
+    {
+        std::vector<uint16_t> blockParentVals = block.second->GetParentVals();
+        // TODO this will need to change for interpolated wavelets
+        WaveletLayerSize rootSize = block.second->GetSize().GetRoot();
+        if (blockParentVals.size() != rootSize.GetPixelCount())
+            std::cout << "Invalid number of parent vals! " << blockParentVals.size() << std::endl;
+
+        parentValues.insert(parentValues.end(), blockParentVals.begin(), blockParentVals.end());
+    }
+
+    SymbolCountDict parentValsSymbolCounts = GenerateSymbolCountDictionary(parentValues);
+
+    // reverse for rANS
+    std::reverse(parentValues.begin(), parentValues.end());
+
+    // rANS encode block parent values
+    RansState parentValsState = RansState(24, GenerateSymbolCountDictionary(parentValues), 8);
+    for (auto value : parentValues)
+        parentValsState.AddSymbol(value);
+
+    // Write to stream
+    WriteSymbolTable(byteStream, parentValsSymbolCounts);
+    WriteValue(byteStream, parentValsState.GetRansState());
+    WriteVector(byteStream, parentValsState.GetCompressedBlocks());
+    
     // Write block bodies + generate headers
     size_t blockHeaderPos = byteStream.size();
     std::vector<CompressedImageBlockHeader> blockHeaders;
@@ -166,15 +194,30 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(waveletSymbolCounts, probabilityRange);
     std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
+    // read parent values
+    SymbolCountDict parentValsCounts = ReadSymbolTable(bytes, readPos);
+    size_t parentValsFinalRansState = ReadValue<size_t>(bytes, readPos);
+    std::vector<uint8_t> parentValsRansBytes = ReadVector<uint8_t>(bytes, readPos);
+    RansState parentValsState = RansState(parentValsRansBytes, parentValsFinalRansState, 24, parentValsCounts, 8);
+
+    std::vector<uint16_t> parentVals;
+    while (parentValsState.HasData())
+        parentVals.push_back(parentValsState.ReadSymbol());
+
     // read block headers
     std::vector<CompressedImageBlockHeader> headers;
+    auto parentVal = parentVals.begin();
     for (uint32_t blockStartY = 0; blockStartY < header.height; blockStartY += header.blockSize)
     {
         for (uint32_t blockStartX = 0; blockStartX < header.width; blockStartX += header.blockSize)
         {
             size_t blockW = std::min(header.width - blockStartX, header.blockSize);
             size_t blockH = std::min(header.height - blockStartY, header.blockSize);
-            CompressedImageBlockHeader header = CompressedImageBlockHeader::Read(bytes, readPos, blockW, blockH);
+            WaveletLayerSize rootSize = WaveletLayerSize(blockW, blockH).GetRoot();
+            std::vector<uint16_t> blockParents;
+            blockParents.insert(blockParents.end(), parentVal, parentVal + rootSize.GetPixelCount());
+            parentVal += rootSize.GetPixelCount();
+            CompressedImageBlockHeader header = CompressedImageBlockHeader::Read(bytes, blockParents, readPos, blockW, blockH);
             headers.push_back(header);
         }
     }

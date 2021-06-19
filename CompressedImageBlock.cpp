@@ -26,7 +26,7 @@ CompressedImageBlock::CompressedImageBlock(std::vector<uint16_t> pixelVals, uint
 
 struct BlockBodyHeader
 {
-    size_t hash;
+    uint32_t hash;
 };
 
 CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, size_t bodiesStart, const std::vector<uint8_t>& bytes, std::shared_ptr<RansTable> symbolTable)
@@ -319,6 +319,16 @@ uint32_t CompressedImageBlock::GetLevel()
     return decodedLevel;
 }
 
+std::vector<uint16_t> CompressedImageBlock::GetParentVals()
+{
+    return header.GetParentVals();
+}
+
+WaveletLayerSize CompressedImageBlock::GetSize() const
+{
+    return WaveletLayerSize(header.width, header.height);
+}
+
 void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
 {
     // struct data that can easily be serialized
@@ -327,13 +337,11 @@ void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
     headerTop.finalRansState = finalRansState;
 
     WriteValue(outputBytes, headerTop);
-    WriteVector(outputBytes, parentVals);
 }
 
-CompressedImageBlockHeader CompressedImageBlockHeader::Read(const std::vector<uint8_t>& bytes, size_t &readPos, uint32_t width, uint32_t height)
+CompressedImageBlockHeader CompressedImageBlockHeader::Read(const std::vector<uint8_t>& bytes, std::vector<uint16_t> parentVals, size_t& readPos, uint32_t width, uint32_t height)
 {
     BlockHeaderHeader headerTop = ReadValue<BlockHeaderHeader>(bytes, readPos);
-    std::vector<uint16_t> parentVals = ReadVector<uint16_t>(bytes, readPos);
     return CompressedImageBlockHeader(headerTop, width, height, parentVals);
 }
 
@@ -368,4 +376,9 @@ CompressedImageBlockHeader::CompressedImageBlockHeader(CompressedImageBlockHeade
 size_t CompressedImageBlockHeader::GetBlockPos()
 {
     return blockPos;
+}
+
+std::vector<uint16_t> CompressedImageBlockHeader::GetParentVals()
+{
+    return parentVals;
 }
