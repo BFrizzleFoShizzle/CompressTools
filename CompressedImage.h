@@ -53,6 +53,8 @@ public:
 
 private:
     CompressedImageHeader header;
+    // Wavelet image containing parent vals
+    std::shared_ptr<CompressedImageBlock> parentValsImage;
     std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<CompressedImageBlock>> compressedImageBlocks;
     SymbolCountDict globalSymbolCounts;
 };

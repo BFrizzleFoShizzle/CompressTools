@@ -101,34 +101,73 @@ std::vector<uint8_t> CompressedImage::Serialize()
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(globalSymbolCounts, probabilityRange);
     std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
+    // Generate wavelet image for parent vals
+   // parent block parents, wavelet counts, header, body
+    size_t parentValsWidth = header.width / (header.blockSize / 2);
+    if (header.width % (header.blockSize) != 0)
+        parentValsWidth += 1;
+    size_t parentValsHeight = header.height / (header.blockSize / 2);
+    if (header.height % (header.blockSize) != 0)
+        parentValsHeight += 1;
+
     // get parent values
     std::vector<uint16_t> parentValues;
+    parentValues.resize(parentValsWidth * parentValsHeight);
+    size_t parentValCount = 0;
     for (auto block : compressedImageBlocks)
     {
         std::vector<uint16_t> blockParentVals = block.second->GetParentVals();
         // TODO this will need to change for interpolated wavelets
         WaveletLayerSize rootParentSize = block.second->GetSize().GetRoot().GetParentSize();
-        if (blockParentVals.size() != rootParentSize.GetPixelCount())
-            std::cout << "Invalid number of parent vals! " << blockParentVals.size() << std::endl;
 
-        parentValues.insert(parentValues.end(), blockParentVals.begin(), blockParentVals.end());
+        size_t blockY = block.first.first;
+        size_t blockX = block.first.second;
+
+        if (blockParentVals.size() != rootParentSize.GetPixelCount())
+            std::cout << "Invalid number of parent vals! " << blockParentVals.size() << " " << rootParentSize.GetPixelCount() << std::endl;
+
+        // write to parent val image (de-swizzle)
+        for (int y = 0; y < rootParentSize.GetHeight(); ++y)
+            for (int x = 0; x < rootParentSize.GetWidth(); ++x)
+                parentValues[(blockY * 2 + y) * parentValsWidth + (blockX * 2 + x)] = blockParentVals[y * rootParentSize.GetWidth() + x];
+
+        //parentValues.insert(parentValues.end(), blockParentVals.begin(), blockParentVals.end());
+        parentValCount += blockParentVals.size();
     }
 
-    SymbolCountDict parentValsSymbolCounts = GenerateSymbolCountDictionary(parentValues);
-
-    // reverse for rANS
-    std::reverse(parentValues.begin(), parentValues.end());
-
-    // rANS encode block parent values
-    RansState parentValsState = RansState(24, GenerateSymbolCountDictionary(parentValues), 8);
-    for (auto value : parentValues)
-        parentValsState.AddSymbol(value);
-
-    // Write to stream
-    WriteSymbolTable(byteStream, parentValsSymbolCounts);
-    WriteValue(byteStream, parentValsState.GetRansState());
-    WriteVector(byteStream, parentValsState.GetCompressedBlocks());
+    if (parentValues.size() != parentValCount)
+        std::cout << "Wrong number of parent values! " << parentValues.size() << " " <<  parentValCount << " " << parentValsWidth << " " << parentValsHeight << std::endl;
     
+    // create parent vals image
+    parentValsImage = std::make_shared< CompressedImageBlock>(parentValues, parentValsWidth, parentValsHeight);
+    size_t parentImageStart = byteStream.size();
+
+    // write parent val block parents
+    WriteVector(byteStream, parentValsImage->GetParentVals());
+
+    // write parent val block wavelet symbol counts
+    SymbolCountDict parentValsWaveletSymbolCounts = GenerateSymbolCountDictionary(parentValsImage->GetWaveletValues());
+    std::cout << "Writing parent vals symbol table..." << std::endl;
+    WriteSymbolTable(byteStream, parentValsWaveletSymbolCounts);
+    // generate rANS symbol table (currently costly)
+    SymbolCountDict parentQuantizedCounts = GenerateQuantizedCounts(parentValsWaveletSymbolCounts, probabilityRange);
+    std::shared_ptr<RansTable> parentSymbolTable = std::make_shared<RansTable>(parentQuantizedCounts);
+
+    // Prepare parent val block body + fill in header
+    std::vector<uint8_t> parentValsBodyBytes;
+    parentValsImage->WriteBody(parentValsBodyBytes, parentSymbolTable);
+    CompressedImageBlockHeader parentsBlockHeader = parentValsImage->GetHeader();
+    // set body position to 0
+    parentsBlockHeader = CompressedImageBlockHeader(parentsBlockHeader, 0);
+
+    // write out header
+    parentsBlockHeader.Write(byteStream);
+
+    // write out body bytes
+    WriteVector(byteStream, parentValsBodyBytes);
+
+    std::cout << "Parent block size:" << (byteStream.size() - parentImageStart) << std::endl;
+
     // Write block bodies + generate headers
     size_t blockHeaderPos = byteStream.size();
     std::vector<CompressedImageBlockHeader> blockHeaders;
@@ -149,10 +188,12 @@ std::vector<uint8_t> CompressedImage::Serialize()
 
     // Write generated headers
     std::cout << "Writing block headers..." << std::endl;
-    for (auto header : blockHeaders)
+    size_t headersStart = byteStream.size();
+    for (auto blockHeader : blockHeaders)
     {
-        header.Write(byteStream);
+        blockHeader.Write(byteStream);
     }
+    std::cout << "Headers size: " << (byteStream.size() - headersStart) << std::endl;
 
     // Write encoded block bodies
     std::cout << "Position at: " << byteStream.size() << std::endl;
@@ -180,7 +221,14 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
 
     uint64_t readPos = sizeof(header);
 
-    // read symbol counts
+    size_t parentValsWidth = header.width / (header.blockSize / 2);
+    if (header.width % (header.blockSize) != 0)
+        parentValsWidth += 1;
+    size_t parentValsHeight = header.height / (header.blockSize / 2);
+    if (header.height % (header.blockSize) != 0)
+        parentValsHeight += 1;
+
+    // global block symbol counts
     SymbolCountDict waveletSymbolCounts = ReadSymbolTable(bytes, readPos);
     // generate rANS symbol table (currently costly)
     size_t probabilityRes = 24;
@@ -188,15 +236,42 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(waveletSymbolCounts, probabilityRange);
     std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
-    // read parent values
-    SymbolCountDict parentValsCounts = ReadSymbolTable(bytes, readPos);
-    size_t parentValsFinalRansState = ReadValue<size_t>(bytes, readPos);
-    std::vector<uint8_t> parentValsRansBytes = ReadVector<uint8_t>(bytes, readPos);
-    RansState parentValsState = RansState(parentValsRansBytes, parentValsFinalRansState, 24, parentValsCounts, 8);
+    // read parent val block parents
+    std::vector<uint16_t> parentValImageParents = ReadVector<uint16_t>(bytes, readPos);
 
+    // read parent val block wavelet counts
+    SymbolCountDict parentValImageWaveletCounts = ReadSymbolTable(bytes, readPos);
+    SymbolCountDict quantizedParentBlockCounts = GenerateQuantizedCounts(parentValImageWaveletCounts, probabilityRange);
+    std::shared_ptr<RansTable> parentBlockSymbolTable = std::make_shared<RansTable>(quantizedParentBlockCounts);
+
+    // read parent val block header
+    CompressedImageBlockHeader parentValImageHeader = CompressedImageBlockHeader::Read(bytes, parentValImageParents, readPos, parentValsWidth, parentValsHeight);
+
+    // read parent val image
+    std::vector<uint8_t> bodyBytes = ReadVector<uint8_t>(bytes, readPos);
+    std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(parentValImageHeader, 0, bodyBytes, parentBlockSymbolTable);
+
+    // Decode parent values
+    std::vector<uint16_t> rawParentVals = block->GetBottomLevelPixels();
+    // Re-swizzle
+    // TODO there are nicer ways of doing this
     std::vector<uint16_t> parentVals;
-    while (parentValsState.HasData())
-        parentVals.push_back(parentValsState.ReadSymbol());
+    for (int y = 0; y < parentValsHeight; y += 2)
+    {
+        for (int x = 0; x < parentValsWidth; x += 2)
+        {
+            parentVals.push_back(rawParentVals[y * parentValsWidth + x]);
+            if(x + 1 < parentValsWidth)
+                parentVals.push_back(rawParentVals[y * parentValsWidth + x + 1]);
+            if (y + 1 < parentValsHeight)
+                parentVals.push_back(rawParentVals[(y + 1) * parentValsWidth + x]);
+            if (x + 1 < parentValsWidth && y + 1 < parentValsHeight)
+                parentVals.push_back(rawParentVals[(y + 1) * parentValsWidth + x + 1]);
+        }
+    }
+
+    if (rawParentVals.size() != parentVals.size())
+        std::cerr << "De-swizzle changed num. parent vals!" << std::endl;
 
     // read block headers
     std::vector<CompressedImageBlockHeader> headers;

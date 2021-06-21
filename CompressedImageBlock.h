@@ -37,6 +37,8 @@ private:
 class CompressedImageBlock
 {
 public:
+    // TODO remove
+    CompressedImageBlock() {};
     CompressedImageBlock(std::vector<uint16_t> pixelVals, uint32_t width, uint32_t height);
     CompressedImageBlock(CompressedImageBlockHeader header, size_t bodiesStart, const std::vector<uint8_t> &bytes, std::shared_ptr<RansTable> symbolTable);
     std::vector<uint16_t> GetWaveletValues();

@@ -8,10 +8,10 @@
 struct CompressedImageBlockHeader::BlockHeaderHeader
 {
     // position of block in stream
-    size_t blockPos;
+    uint32_t blockPos;
 
     // rANS
-    uint64_t finalRansState;
+    uint32_t finalRansState;
 };
 
 CompressedImageBlock::CompressedImageBlock(std::vector<uint16_t> pixelVals, uint32_t width, uint32_t height)
@@ -194,6 +194,12 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
     //std::cout << "Starting rANS encode..." << std::endl;
     for (auto value : blockWavelets)
         waveletRansState->AddSymbol(value);
+
+    size_t finalRansState = waveletRansState->GetRansState();
+
+    if (finalRansState > std::numeric_limits<uint32_t>::max())
+        std::cerr << "Final rANS state is above max!" << std::endl;
+
     header.finalRansState = waveletRansState->GetRansState();
     //std::cout << "finsihed rANS encode..." << std::endl;
 

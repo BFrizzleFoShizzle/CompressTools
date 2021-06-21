@@ -45,7 +45,7 @@ uint32_t  WaveletLayerSize::GetParentWidth() const
 
 bool WaveletLayerSize::IsRoot() const
 {
-    return !(GetParentWidth() > 1 && GetParentHeight() > 1);
+    return !(GetParentWidth() > 2 || GetParentHeight() > 2);
 }
 
 WaveletLayerSize WaveletLayerSize::GetRoot() const
