@@ -10,7 +10,7 @@ WaveletEncodeLayer::WaveletEncodeLayer(std::vector<uint16_t> values, uint32_t wi
     assert(values.size() == width * height);
     //  Initialize + prealloc memory
     wavelets.resize(size.GetWaveletCount());
-    uint32_t parentReserveCount = size.GetPixelCount();
+    uint32_t parentReserveCount = size.GetParentSize().GetPixelCount();
     parentVals.resize(parentReserveCount);
 
     auto currWavelet = wavelets.begin();

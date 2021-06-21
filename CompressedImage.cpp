@@ -107,8 +107,8 @@ std::vector<uint8_t> CompressedImage::Serialize()
     {
         std::vector<uint16_t> blockParentVals = block.second->GetParentVals();
         // TODO this will need to change for interpolated wavelets
-        WaveletLayerSize rootSize = block.second->GetSize().GetRoot();
-        if (blockParentVals.size() != rootSize.GetPixelCount())
+        WaveletLayerSize rootParentSize = block.second->GetSize().GetRoot().GetParentSize();
+        if (blockParentVals.size() != rootParentSize.GetPixelCount())
             std::cout << "Invalid number of parent vals! " << blockParentVals.size() << std::endl;
 
         parentValues.insert(parentValues.end(), blockParentVals.begin(), blockParentVals.end());
@@ -207,10 +207,10 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
         {
             size_t blockW = std::min(header.width - blockStartX, header.blockSize);
             size_t blockH = std::min(header.height - blockStartY, header.blockSize);
-            WaveletLayerSize rootSize = WaveletLayerSize(blockW, blockH).GetRoot();
+            WaveletLayerSize rootParentSize = WaveletLayerSize(blockW, blockH).GetRoot().GetParentSize();
             std::vector<uint16_t> blockParents;
-            blockParents.insert(blockParents.end(), parentVal, parentVal + rootSize.GetPixelCount());
-            parentVal += rootSize.GetPixelCount();
+            blockParents.insert(blockParents.end(), parentVal, parentVal + rootParentSize.GetPixelCount());
+            parentVal += rootParentSize.GetPixelCount();
             CompressedImageBlockHeader header = CompressedImageBlockHeader::Read(bytes, blockParents, readPos, blockW, blockH);
             headers.push_back(header);
         }
