@@ -15,12 +15,6 @@ SymbolCountDict GenerateSymbolCountDictionary(std::vector<uint16_t> symbols)
     }
     return std::move(symbolCounts);
 }
-CompressedImage::CompressedImage(std::shared_ptr<WaveletLayer> waveletPyramidBottom)
-    : waveletPyramidBottom(waveletPyramidBottom)
-{
-    header.width = waveletPyramidBottom->GetWidth();
-    header.height = waveletPyramidBottom->GetHeight();
-}
 
 CompressedImage::CompressedImage(const std::vector<uint16_t>& values, size_t width, size_t height, size_t blockSize)
 {

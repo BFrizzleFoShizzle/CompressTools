@@ -6,7 +6,6 @@ class WaveletEncodeLayer
 {
 public:
     WaveletEncodeLayer(std::vector<uint16_t> data, uint32_t width, uint32_t height);
-    WaveletEncodeLayer(const std::vector<uint16_t>& pyramidWavelets, std::vector<uint16_t> rootParentVals, uint32_t width, uint32_t height);
 
     std::vector<uint16_t> DecodeLayer() const;
     // TODO is this really const?

@@ -56,44 +56,6 @@ WaveletEncodeLayer::WaveletEncodeLayer(std::vector<uint16_t> values, uint32_t wi
     }
 }
 
-
-WaveletEncodeLayer::WaveletEncodeLayer(const std::vector<uint16_t>& pyramidWavelets, std::vector<uint16_t> rootParentVals, uint32_t width, uint32_t height)
-    : wavelets(), size(width, height)
-{
-    // reconstruct parent tree
-    if (!IsRoot())
-    {
-        std::cout << "Processing parent..." << std::endl;
-        parent = std::make_shared<WaveletEncodeLayer>(pyramidWavelets, rootParentVals, size.GetParentWidth(), size.GetParentHeight());
-    }
-    else
-    {
-        // We're the root, parent vals are for us
-        parentVals = rootParentVals;
-    }
-
-    // sum of wavelets used by parent layers
-    // (used to get index of child wavelets)
-    uint64_t parentWaveletCounts = 0;
-    std::shared_ptr<WaveletEncodeLayer> parentLayer = parent;
-    while (parentLayer)
-    {
-        parentWaveletCounts += parentLayer->GetWaveletCount();
-        parentLayer = parentLayer->GetParentLayer();
-    }
-
-    // copy layer wavelets
-    uint64_t waveletsCount = GetWaveletCount();
-    uint64_t readIdx = pyramidWavelets.size() - (parentWaveletCounts + waveletsCount);
-    wavelets.insert(wavelets.end(), pyramidWavelets.begin() + readIdx, pyramidWavelets.begin() + readIdx + waveletsCount);
-
-    if (!IsRoot())
-    {
-        std::cout << "Decoding parent... " << std::endl;
-        parentVals = parent->DecodeLayer();
-    }
-}
-
 uint32_t WaveletEncodeLayer::GetWidth() const
 {
     return size.GetWidth();
