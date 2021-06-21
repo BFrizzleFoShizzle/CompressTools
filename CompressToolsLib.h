@@ -16,5 +16,6 @@ namespace CompressToolsLib {
 	__declspec(dllexport) void GetBlockLODs(CompressedImageFileHdl image, uint8_t* output);
 	__declspec(dllexport) uint32_t GetImageWidthInBlocks(CompressedImageFileHdl image);
 	__declspec(dllexport) uint32_t GetImageHeightInBlocks(CompressedImageFileHdl image);
+	__declspec(dllexport) uint32_t GetMaxLOD(CompressedImageFileHdl image);
 
 }

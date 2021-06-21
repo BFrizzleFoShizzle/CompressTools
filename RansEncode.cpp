@@ -222,12 +222,25 @@ RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, 
 void RansState::AddSymbol(uint16_t symbol)
 {
 	RansEntry entry = ransTable->GetSymbolEntry(symbol);
+	if (entry.count == 0 || entry.count >= probabilityRange)
+	{
+		std::cout << "Bad rANS value" << std::endl;
+		return;
+	}
+
 
 	// renormalize if necessary
+	int count = 0;
 	while (ransState >= blockSize * (stateMin / probabilityRange) * entry.count)
 	{
 		compressedBlocks.push_back(ransState % blockSize);
 		ransState /= blockSize;
+		++count;
+		if (count > 100)
+		{
+			std::cout << "RANS STUCK IN LOOP?" << std::endl;
+			continue;
+		}
 	}
 
 	// add symbol to rANS state

@@ -46,16 +46,17 @@ CompressedImage::CompressedImage(const std::vector<uint16_t>& values, size_t wid
                     blockValues[pixY * blockW  + pixX] = values[(blockStartY + pixY) * width + (blockStartX + pixX)];
                 }
             }
-            if (blockX == 50 && blockY == 50)
-                std::cout << "Chosen block hash: " << HashVec(blockValues) << std::endl;
             // Create compressed block
             std::shared_ptr<CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(blockValues, blockW, blockH);
             std::vector<uint16_t> layerWavelets = block->GetWaveletValues();
+            if (blockX == 50 && blockY == 50)
+                std::cout << "Chosen block hash: " << HashVec(blockValues) << " Num. wavelets: " << layerWavelets.size() << std::endl;
             waveletValues.insert(waveletValues.end(), layerWavelets.begin(), layerWavelets.end());
             compressedImageBlocks.emplace(std::make_pair(blockY, blockX), block);
         }
     }
     // generate symbol table
+    std::cout << waveletValues.size() << " wavelet values..." << std::endl;
     std::cout << "Generating symbol counts..." << std::endl;
     globalSymbolCounts = GenerateSymbolCountDictionary(waveletValues);
     std::cout << compressedImageBlocks.size() << " blocks created." << std::endl;
@@ -411,4 +412,17 @@ uint32_t CompressedImage::GetHeightInBlocks() const
     if (header.height % header.blockSize != 0)
         roundedHeight += 1;
     return roundedHeight;
+}
+
+uint32_t CompressedImage::GetTopLOD() const
+{
+    uint32_t LOD = 0;
+    WaveletLayerSize size = WaveletLayerSize(header.blockSize, header.blockSize);
+    while (!size.IsRoot())
+    {
+        ++LOD;
+        size = size.GetParentSize();
+    }
+    // add 1 for "parent vals" LOD
+    return LOD + 1;
 }

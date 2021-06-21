@@ -83,11 +83,31 @@ int main()
         }
 
         std::cout << "Generating wavelet image..." << std::endl;
-        std::shared_ptr<CompressedImage> compressedImage = std::make_shared<CompressedImage>(values, width, height, 128);
+        std::shared_ptr<CompressedImage> compressedImage = std::make_shared<CompressedImage>(values, width, height, 32);
         std::cout << "Serializing..." << std::endl; 
         std::vector<uint8_t> imageBytes = compressedImage->Serialize();
         std::cout << "Final encoded bytes: " << imageBytes.size() << std::endl;
         std::shared_ptr<CompressedImage> decodedImage = CompressedImage::Deserialize(imageBytes);
+
+        std::cout << decodedImage->GetTopLOD() << std::endl;
+        
+        std::vector<uint8_t> blockLevels = decodedImage->GetBlockLevels();
+        std::cout << int(blockLevels[0]) << std::endl;
+        decodedImage->GetPixel(0, 0);
+        blockLevels = decodedImage->GetBlockLevels();
+        std::cout << int(blockLevels[0]) << std::endl;
+        decodedImage->GetPixel(64, 0);
+        blockLevels = decodedImage->GetBlockLevels();
+        std::cout << int(blockLevels[0]) << std::endl;
+        decodedImage->GetPixel(32, 0);
+        blockLevels = decodedImage->GetBlockLevels();
+        std::cout << int(blockLevels[0]) << std::endl;
+        decodedImage->GetPixel(16, 0);
+        blockLevels = decodedImage->GetBlockLevels();
+        std::cout << int(blockLevels[0]) << std::endl;
+        decodedImage->GetPixel(8, 0);
+        blockLevels = decodedImage->GetBlockLevels();
+        std::cout << int(blockLevels[0]) << std::endl;
         
         // test aligned reads
         std::cout << "Testing aligned reads..." << imageBytes.size() << std::endl;

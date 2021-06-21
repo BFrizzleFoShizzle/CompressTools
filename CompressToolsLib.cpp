@@ -16,7 +16,7 @@ struct CompressToolsLib::CompressedImageFile
 
 __declspec(dllexport) CompressedImageFileHdl CompressToolsLib::OpenImage(const char* filename)
 {
-	MessageBoxA(0, "Loading heightmap...", "Debug", MB_OK);
+	//MessageBoxA(0, "Loading heightmap...", "Debug", MB_OK);
 	std::ifstream compressedFile(filename, std::ios::binary | std::ios::ate);
 	if (!compressedFile.is_open())
 		MessageBoxA(0, "Error opening heightmap!", "Debug", MB_OK);
@@ -26,19 +26,19 @@ __declspec(dllexport) CompressedImageFileHdl CompressToolsLib::OpenImage(const c
 	compressedFile.seekg(0, std::ios::beg);
 
 	// read bytes
-	MessageBoxA(0, "Reading...", "Debug", MB_OK);
+	//MessageBoxA(0, "Reading...", "Debug", MB_OK);
 	std::vector<uint8_t> fileBytes;
 	fileBytes.resize(numBytes);
 	compressedFile.read(reinterpret_cast<char*>(&fileBytes[0]), numBytes);
 	compressedFile.close();
 
 	// decode
-	MessageBoxA(0, "Decoding...", "Debug", MB_OK);
+	//MessageBoxA(0, "Decoding...", "Debug", MB_OK);
 	CompressedImageFileHdl imageHdl = new CompressedImageFile();
 	imageHdl->filename = filename;
 	imageHdl->image = CompressedImage::Deserialize(fileBytes);
 
-	MessageBoxA(0, "Heightmap loaded!", "Debug", MB_OK);
+	//MessageBoxA(0, "Heightmap loaded!", "Debug", MB_OK);
 	return imageHdl;
 }
 
@@ -77,4 +77,9 @@ __declspec(dllexport) void CompressToolsLib::GetBlockLODs(CompressedImageFileHdl
 {
 	std::vector<uint8_t> blockLevels = image->image->GetBlockLevels();
 	memcpy(output, &blockLevels[0], sizeof(uint8_t) * blockLevels.size());
+}
+
+__declspec(dllexport) uint32_t CompressToolsLib::GetMaxLOD(CompressedImageFileHdl image)
+{
+	return image->image->GetTopLOD();
 }

@@ -51,6 +51,8 @@ public:
     uint32_t GetWidthInBlocks() const;
     uint32_t GetHeightInBlocks() const;
 
+    uint32_t GetTopLOD() const;
+
 private:
     CompressedImageHeader header;
     // Wavelet image containing parent vals
