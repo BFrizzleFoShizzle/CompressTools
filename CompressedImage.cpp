@@ -319,6 +319,13 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
         }
     }
 
+    // get theoretical RAM usage
+    size_t memoryOverhead = 0;
+    for (auto header : headers)
+        memoryOverhead += header.GetMemoryFootprint();
+    memoryOverhead += globalSymbolTable->GetMemoryFootprint();
+    std::cout << "Header memory overhead: " << memoryOverhead << " bytes." << std::endl;
+
     std::shared_ptr<CompressedImage> image = std::make_shared<CompressedImage>();
     image->compressedImageBlocks = std::move(blocks);
     image->header = header;

@@ -21,6 +21,8 @@ public:
     void Write(std::vector<uint8_t>& outputBytes);
     static CompressedImageBlockHeader Read(const std::vector<uint8_t>& bytes, std::vector<uint16_t> parentVals, size_t &readPos, uint32_t width, uint32_t height);
     size_t GetBlockPos();
+    // returns RAM usage
+    size_t GetMemoryFootprint() const;
     std::vector<uint16_t> GetParentVals();
 private:
     // TODO possibly not needded?

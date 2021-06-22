@@ -63,6 +63,16 @@ RansEntry RansTable::GetSymbolEntryFromFreq(uint32_t prob)
 	assert(false);
 }
 
+
+size_t RansTable::GetMemoryFootprint() const
+{
+	// this isn't that accurate
+	size_t mapSize = std::max(symbolTable.bucket_count(), symbolTable.size()) * sizeof(std::unordered_map< uint16_t, RansEntry>::value_type);
+	size_t vectorSize = cdfTable.size() * sizeof(RansEntry);
+
+	return sizeof(RansTable) + mapSize + vectorSize;
+}
+
 SymbolCountDict GenerateQuantizedCounts(SymbolCountDict unquantizedCounts, size_t probabilityRange)
 {
 	uint64_t countsSum = 0;

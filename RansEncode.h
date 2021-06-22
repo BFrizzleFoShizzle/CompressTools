@@ -57,6 +57,9 @@ public:
 	RansEntry GetSymbolEntry(uint16_t symbol);
 	RansEntry GetSymbolEntryFromFreq(uint32_t prob);
 
+	// Get RAM usage
+	size_t GetMemoryFootprint() const;
+
 private:
 	// TODO do we need both of these?
 	std::unordered_map<uint16_t, RansEntry> symbolTable;

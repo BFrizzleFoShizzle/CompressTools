@@ -384,6 +384,13 @@ size_t CompressedImageBlockHeader::GetBlockPos()
     return blockPos;
 }
 
+size_t CompressedImageBlockHeader::GetMemoryFootprint() const
+{
+    // allocated bytes
+    size_t vectorMemoryUsage = parentVals.capacity() * sizeof(parentVals[0]);
+    return sizeof(CompressedImageBlockHeader) + vectorMemoryUsage;
+}
+
 std::vector<uint16_t> CompressedImageBlockHeader::GetParentVals()
 {
     return parentVals;
