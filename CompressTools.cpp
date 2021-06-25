@@ -83,6 +83,8 @@ int main()
         }
 
         std::cout << "Generating wavelet image..." << std::endl;
+        //std::shared_ptr<WaveletLayer> bottomLayer = std::make_shared<WaveletLayer>(values, width, height);
+        //std::shared_ptr<CompressedImage> compressedImage = std::make_shared<CompressedImage>(bottomLayer);
         std::shared_ptr<CompressedImage> compressedImage = std::make_shared<CompressedImage>(values, width, height, 32);
         std::cout << "Serializing..." << std::endl; 
         std::vector<uint8_t> imageBytes = compressedImage->Serialize();
@@ -103,14 +105,30 @@ int main()
         blockLevels = decodedImage->GetBlockLevels();
         std::cout << int(blockLevels[0]) << std::endl;
         decodedImage->GetPixel(16, 0);
+        decodedImage->GetPixel(16, 16);
         blockLevels = decodedImage->GetBlockLevels();
         std::cout << int(blockLevels[0]) << std::endl;
         decodedImage->GetPixel(8, 0);
         blockLevels = decodedImage->GetBlockLevels();
         std::cout << int(blockLevels[0]) << std::endl;
         
+        // test parent reads
+        for (int y = 0; y < height; y += 16)
+        {
+            for (int x = 0; x < width; x += 16)
+            {
+                uint16_t sourcePixel = values[y * width + x];
+                uint16_t decodedPixel = decodedImage->GetPixel(x, y);
+                assert(decodedPixel == sourcePixel);
+                if (decodedPixel != sourcePixel)
+                {
+                    std::cout << "Decoded pixel values at (" << x << ", " << y << ") did not match." << std::endl;
+                }
+            }
+        }
+        
         // test aligned reads
-        std::cout << "Testing aligned reads..." << imageBytes.size() << std::endl;
+        std::cout << "Testing aligned reads..." << std::endl;
         for (int y = 1024; y < 2048; y += 4)
         {
             for (int x = 1024; x < 2048; x += 4)
@@ -125,8 +143,7 @@ int main()
             }
         }
 
-
-        std::cout << "Decoding bottom-level pixels..." << imageBytes.size() << std::endl;
+        std::cout << "Decoding bottom-level pixels..." << std::endl;
         std::vector<uint16_t> decodedPixels = decodedImage->GetBottomLevelPixels();
         for (int i = 0; i < values.size(); ++i)
         {
