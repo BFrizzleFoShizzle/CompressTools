@@ -269,7 +269,7 @@ uint16_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
     // special case - value is root parent value
     if (positionLevel == rootLevel)
     {
-        uint32_t parentValIdx = shiftedY * waveletLayerSizes.back().GetParentWidth() + x;
+        uint32_t parentValIdx = shiftedY * waveletLayerSizes.back().GetParentWidth() + shiftedX;
         return header.parentVals[parentValIdx];
     }
 
