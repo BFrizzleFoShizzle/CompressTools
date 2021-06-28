@@ -5,6 +5,7 @@
 #include "WaveletEncodeLayer.h"
 #include "WaveletDecodeLayer.h"
 #include "RansEncode.h"
+#include "Serialize.h"
 
 class CompressedImageBlock;
 
@@ -19,7 +20,7 @@ public:
     CompressedImageBlockHeader(CompressedImageBlockHeader header, size_t blockPos);
     CompressedImageBlockHeader(std::vector<uint16_t> parentVals, uint32_t width, uint32_t height);
     void Write(std::vector<uint8_t>& outputBytes);
-    static CompressedImageBlockHeader Read(const std::vector<uint8_t>& bytes, std::vector<uint16_t> parentVals, size_t &readPos, uint32_t width, uint32_t height);
+    static CompressedImageBlockHeader Read(ByteIterator& bytes, std::vector<uint16_t> parentVals, uint32_t width, uint32_t height);
     size_t GetBlockPos();
     // returns RAM usage
     size_t GetMemoryFootprint() const;
@@ -42,7 +43,7 @@ public:
     // TODO remove
     CompressedImageBlock() {};
     CompressedImageBlock(std::vector<uint16_t> pixelVals, uint32_t width, uint32_t height);
-    CompressedImageBlock(CompressedImageBlockHeader header, size_t bodiesStart, const std::vector<uint8_t> &bytes, std::shared_ptr<RansTable> symbolTable);
+    CompressedImageBlock(CompressedImageBlockHeader header, ByteIterator &bytes, std::shared_ptr<RansTable> symbolTable);
     std::vector<uint16_t> GetWaveletValues();
     void WriteBody(std::vector<uint8_t>& outputBytes, const std::shared_ptr<RansTable>& globalSymbolTable);
 
@@ -52,6 +53,7 @@ public:
 
     uint32_t GetLevel();
 
+    // TODO ptr?
     CompressedImageBlockHeader GetHeader();
     std::vector<uint16_t> GetParentVals();
 

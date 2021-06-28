@@ -84,6 +84,19 @@ SymbolCountDict ReadSymbolTable(const std::vector<uint8_t>& inputBytes, uint64_t
     return std::move(symbolCountDict);
 }
 
+SymbolCountDict ReadSymbolTable(ByteIterator &bytes)
+{
+    // Convert to vector so we can sort by entropy, resulting in consistant ordering
+    std::vector<SymbolCount> countsVec = ReadVector<SymbolCount>(bytes);
+
+    // TODO this gets turned back into a count vector later on...
+    SymbolCountDict symbolCountDict;
+    for (auto symbolCount : countsVec)
+        symbolCountDict.emplace(symbolCount.symbol, symbolCount.count);
+
+    return std::move(symbolCountDict);
+}
+
 std::vector<uint8_t> CompressedImage::Serialize()
 {
     std::vector<uint8_t> byteStream;
@@ -100,7 +113,7 @@ std::vector<uint8_t> CompressedImage::Serialize()
     size_t probabilityRes = 24;
     size_t probabilityRange = 1 << probabilityRes;
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(globalSymbolCounts, probabilityRange);
-    std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
+    globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
     // Generate wavelet image for parent vals
    // parent block parents, wavelet counts, header, body
@@ -140,7 +153,7 @@ std::vector<uint8_t> CompressedImage::Serialize()
         std::cout << "Wrong number of parent values! " << parentValues.size() << " " <<  parentValCount << " " << parentValsWidth << " " << parentValsHeight << std::endl;
     
     // create parent vals image
-    parentValsImage = std::make_shared< CompressedImageBlock>(parentValues, parentValsWidth, parentValsHeight);
+    std::shared_ptr<CompressedImageBlock> parentValsImage = std::make_shared< CompressedImageBlock>(parentValues, parentValsWidth, parentValsHeight);
     size_t parentImageStart = byteStream.size();
 
     // write parent val block parents
@@ -210,17 +223,15 @@ std::vector<uint8_t> CompressedImage::Serialize()
     return std::move(byteStream);
 }
 
-std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<uint8_t>& bytes)
+// shared code
+std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterator& bytes)
 {
     // read header
     std::cout << "Reading CompressedImage header..." << std::endl;
-    CompressedImageHeader header;
-    memcpy(&header, &bytes[0], sizeof(header));
+    CompressedImageHeader header = ReadValue<CompressedImageHeader>(bytes);
     assert(header.IsCorrect());
     if (!header.IsCorrect())
         std::cerr << "Image header validation failed in CompressedImage::Deserialize()" << std::endl;
-
-    uint64_t readPos = sizeof(header);
 
     size_t parentValsWidth = header.width / (header.blockSize / 2);
     if (header.width % (header.blockSize) != 0)
@@ -230,7 +241,7 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
         parentValsHeight += 1;
 
     // global block symbol counts
-    SymbolCountDict waveletSymbolCounts = ReadSymbolTable(bytes, readPos);
+    SymbolCountDict waveletSymbolCounts = ReadSymbolTable(bytes);
     // generate rANS symbol table (currently costly)
     size_t probabilityRes = 24;
     size_t probabilityRange = 1 << probabilityRes;
@@ -238,19 +249,21 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
     std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
     // read parent val block parents
-    std::vector<uint16_t> parentValImageParents = ReadVector<uint16_t>(bytes, readPos);
+    std::vector<uint16_t> parentValImageParents = ReadVector<uint16_t>(bytes);
 
     // read parent val block wavelet counts
-    SymbolCountDict parentValImageWaveletCounts = ReadSymbolTable(bytes, readPos);
+    SymbolCountDict parentValImageWaveletCounts = ReadSymbolTable(bytes);
     SymbolCountDict quantizedParentBlockCounts = GenerateQuantizedCounts(parentValImageWaveletCounts, probabilityRange);
     std::shared_ptr<RansTable> parentBlockSymbolTable = std::make_shared<RansTable>(quantizedParentBlockCounts);
 
     // read parent val block header
-    CompressedImageBlockHeader parentValImageHeader = CompressedImageBlockHeader::Read(bytes, parentValImageParents, readPos, parentValsWidth, parentValsHeight);
+    CompressedImageBlockHeader parentValImageHeader = CompressedImageBlockHeader::Read(bytes, parentValImageParents, parentValsWidth, parentValsHeight);
 
     // read parent val image
-    std::vector<uint8_t> bodyBytes = ReadVector<uint8_t>(bytes, readPos);
-    std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(parentValImageHeader, 0, bodyBytes, parentBlockSymbolTable);
+    std::vector<uint8_t> bodyBytes = ReadVector<uint8_t>(bytes);
+    membuf bodyBuf(&bodyBytes[0], &bodyBytes[bodyBytes.size()]);
+    ByteIterator bodyStream(&bodyBuf);
+    std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(parentValImageHeader, bodyStream, parentBlockSymbolTable);
 
     // Decode parent values
     std::vector<uint16_t> rawParentVals = block->GetBottomLevelPixels();
@@ -262,7 +275,7 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
         for (int x = 0; x < parentValsWidth; x += 2)
         {
             parentVals.push_back(rawParentVals[y * parentValsWidth + x]);
-            if(x + 1 < parentValsWidth)
+            if (x + 1 < parentValsWidth)
                 parentVals.push_back(rawParentVals[y * parentValsWidth + x + 1]);
             if (y + 1 < parentValsHeight)
                 parentVals.push_back(rawParentVals[(y + 1) * parentValsWidth + x]);
@@ -287,18 +300,39 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
             std::vector<uint16_t> blockParents;
             blockParents.insert(blockParents.end(), parentVal, parentVal + rootParentSize.GetPixelCount());
             parentVal += rootParentSize.GetPixelCount();
-            CompressedImageBlockHeader header = CompressedImageBlockHeader::Read(bytes, blockParents, readPos, blockW, blockH);
+            CompressedImageBlockHeader header = CompressedImageBlockHeader::Read(bytes, blockParents, blockW, blockH);
             headers.push_back(header);
         }
     }
 
     std::cout << headers.size() << " block headers read." << std::endl;
-    std::cout << "Position at: " << readPos << std::endl;
+
+    // get theoretical RAM usage
+    size_t memoryOverhead = 0;
+    for (auto header : headers)
+        memoryOverhead += header.GetMemoryFootprint();
+    memoryOverhead += globalSymbolTable->GetMemoryFootprint();
+    std::cout << "Header memory overhead: " << memoryOverhead << " bytes." << std::endl;
+
+    std::shared_ptr<CompressedImage> image = std::make_shared<CompressedImage>();
+    image->header = header;
+    image->globalSymbolTable = globalSymbolTable;
+    image->globalSymbolCounts = std::move(waveletSymbolCounts);
+    image->blockHeaders = std::move(headers);
+
+    return std::move(image);
+}
+
+std::shared_ptr<CompressedImage> CompressedImage::Deserialize(ByteIterator &bytes)
+{
+    // read headers
+    std::shared_ptr<CompressedImage> image = GenerateFromStream(bytes);
+
+    CompressedImageHeader& header = image->header;
 
     // read block bodies
-    size_t bodiesStart = readPos;
     std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<CompressedImageBlock>> blocks;
-    auto blockHeader = headers.begin();
+    auto blockHeader = image->blockHeaders.begin();
     std::cout << "Decoding block bodies..." << std::endl;
     for (uint32_t blockStartY = 0; blockStartY < header.height; blockStartY += header.blockSize)
     {
@@ -309,7 +343,7 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
             uint32_t blockW = std::min(header.width - blockStartX, header.blockSize);
             uint32_t blockH = std::min(header.height - blockStartY, header.blockSize);
             
-            std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(*blockHeader, bodiesStart, bytes, globalSymbolTable);
+            std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(*blockHeader, bytes, image->globalSymbolTable);
             if (blockX == 50 && blockY == 50)
                 std::cout << "Chosen block hash: " << HashVec(block->GetBottomLevelPixels()) << std::endl;
 
@@ -319,19 +353,28 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(const std::vector<
         }
     }
 
-    // get theoretical RAM usage
-    size_t memoryOverhead = 0;
-    for (auto header : headers)
-        memoryOverhead += header.GetMemoryFootprint();
-    memoryOverhead += globalSymbolTable->GetMemoryFootprint();
-    std::cout << "Header memory overhead: " << memoryOverhead << " bytes." << std::endl;
-
-    std::shared_ptr<CompressedImage> image = std::make_shared<CompressedImage>();
     image->compressedImageBlocks = std::move(blocks);
-    image->header = header;
-    image->globalSymbolCounts = std::move(waveletSymbolCounts);
 
     return std::move(image);
+}
+
+// Opens file for streaming
+std::shared_ptr<CompressedImage> CompressedImage::OpenStream(std::string filename)
+{
+    // Open file 
+    std::basic_ifstream<uint8_t> compressedFile(filename, std::ios::binary);
+
+    ByteIterator bytes(compressedFile);
+
+    // read headers
+    std::shared_ptr<CompressedImage> image = GenerateFromStream(bytes);
+    std::cout << "Stream pos: " << compressedFile.tellg() << std::endl;
+    image->blockBodiesStart = compressedFile.tellg();
+    // close + reopen file (std::move gives buggy behaviour)
+    compressedFile.close();
+    image->fileStream = std::basic_ifstream<uint8_t>(filename, std::ios::binary);
+
+    return image;
 }
 
 std::vector<uint16_t> CompressedImage::GetBottomLevelPixels()
@@ -390,9 +433,27 @@ uint16_t CompressedImage::GetPixel(size_t x, size_t y)
     uint32_t subBlockX = x % header.blockSize;
     uint32_t subBlockY = y % header.blockSize;
 
-    std::shared_ptr<CompressedImageBlock> block = compressedImageBlocks.at(std::make_pair(blockY, blockX));
+    auto foundBlock = compressedImageBlocks.find(std::make_pair(blockY, blockX));
+    // create block if needed
+    if (foundBlock == compressedImageBlocks.end())
+    {
+        //std::cout << "Block not decompressed..." << std::endl;
+        size_t blockIdx = blockY * GetWidthInBlocks() + blockX;
+        CompressedImageBlockHeader& header = blockHeaders[blockIdx];
 
-    return block->GetPixel(subBlockX, subBlockY);
+        fileStream.seekg(blockBodiesStart + header.GetBlockPos());
+        ByteIterator bytes(fileStream);
+
+        std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(header, bytes, globalSymbolTable);
+
+        compressedImageBlocks.emplace(std::make_pair(blockY, blockX), block);
+        return block->GetPixel(subBlockX, subBlockY);
+    }
+    else
+    {
+        std::shared_ptr<CompressedImageBlock> block = foundBlock->second;
+        return block->GetPixel(subBlockX, subBlockY);
+    }
 }
 
 uint32_t CompressedImage::GetWidth() const

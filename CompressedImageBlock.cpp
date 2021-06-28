@@ -29,13 +29,12 @@ struct BlockBodyHeader
     uint32_t hash;
 };
 
-CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, size_t bodiesStart, const std::vector<uint8_t>& bytes, std::shared_ptr<RansTable> symbolTable)
+CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, ByteIterator &bytes, std::shared_ptr<RansTable> symbolTable)
     : header(header)
 {
-    size_t readPos = bodiesStart + header.GetBlockPos();
-    BlockBodyHeader bodyHeader = ReadValue<BlockBodyHeader>(bytes, readPos);
+    BlockBodyHeader bodyHeader = ReadValue<BlockBodyHeader>(bytes);
 
-    std::vector<uint8_t> rANSBytes = ReadVector<uint8_t>(bytes, readPos);
+    std::vector<uint8_t> rANSBytes = ReadVector<uint8_t>(bytes);
 
     if (header.finalRansState == 0)
     {
@@ -345,9 +344,9 @@ void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
     WriteValue(outputBytes, headerTop);
 }
 
-CompressedImageBlockHeader CompressedImageBlockHeader::Read(const std::vector<uint8_t>& bytes, std::vector<uint16_t> parentVals, size_t& readPos, uint32_t width, uint32_t height)
+CompressedImageBlockHeader CompressedImageBlockHeader::Read(ByteIterator &bytes, std::vector<uint16_t> parentVals, uint32_t width, uint32_t height)
 {
-    BlockHeaderHeader headerTop = ReadValue<BlockHeaderHeader>(bytes, readPos);
+    BlockHeaderHeader headerTop = ReadValue<BlockHeaderHeader>(bytes);
     return CompressedImageBlockHeader(headerTop, width, height, parentVals);
 }
 

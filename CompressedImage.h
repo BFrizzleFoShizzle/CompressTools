@@ -5,6 +5,7 @@
 
 #include "RansEncode.h"
 #include "CompressedImageBlock.h"
+#include "Serialize.h"
 
 struct CompressedImageHeader
 {
@@ -36,8 +37,12 @@ class CompressedImage
 public:
     // TODO remove
     CompressedImage() {};
+    // open + full decode
     CompressedImage(const std::vector<uint16_t>& values, size_t width, size_t height, size_t blockSize);
-    static std::shared_ptr<CompressedImage> Deserialize(const std::vector<uint8_t>& bytes);
+    // loads whole file
+    static std::shared_ptr<CompressedImage> Deserialize(ByteIterator& bytes);
+    // Opens for streaming
+    static std::shared_ptr<CompressedImage> OpenStream(std::string filename);
     std::vector<uint8_t> Serialize();
     std::vector<uint16_t> GetBottomLevelPixels();
 
@@ -54,9 +59,18 @@ public:
     uint32_t GetTopLOD() const;
 
 private:
+    // generate header info from stream
+    static std::shared_ptr<CompressedImage> GenerateFromStream(ByteIterator& bytes);
+
     CompressedImageHeader header;
     // Wavelet image containing parent vals
-    std::shared_ptr<CompressedImageBlock> parentValsImage;
     std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<CompressedImageBlock>> compressedImageBlocks;
+
+    // used for streamed decode
+    std::vector<CompressedImageBlockHeader> blockHeaders;
+    std::shared_ptr<RansTable> globalSymbolTable;
+    std::basic_ifstream<uint8_t> fileStream;
+    size_t blockBodiesStart;
+
     SymbolCountDict globalSymbolCounts;
 };

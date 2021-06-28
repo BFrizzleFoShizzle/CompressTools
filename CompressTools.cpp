@@ -89,7 +89,9 @@ int main()
         std::cout << "Serializing..." << std::endl; 
         std::vector<uint8_t> imageBytes = compressedImage->Serialize();
         std::cout << "Final encoded bytes: " << imageBytes.size() << std::endl;
-        std::shared_ptr<CompressedImage> decodedImage = CompressedImage::Deserialize(imageBytes);
+        membuf imageBuf(imageBytes);
+        ByteIterator imageByteIter(&imageBuf);
+        std::shared_ptr<CompressedImage> decodedImage = CompressedImage::Deserialize(imageByteIter);
 
         std::cout << decodedImage->GetTopLOD() << std::endl;
         
