@@ -34,7 +34,7 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, By
 {
     BlockBodyHeader bodyHeader = ReadValue<BlockBodyHeader>(bytes);
 
-    std::vector<uint8_t> rANSBytes = ReadVector<uint8_t>(bytes);
+    std::shared_ptr<VectorStream<uint8_t>> ransByteStream = StreamVector<uint8_t>(bytes);
 
     if (header.finalRansState == 0)
     {
@@ -44,7 +44,7 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, By
     }
 
     //std::cout << rANSBytes.size() << " Bytes read" << std::endl;
-    ransState = RansState(rANSBytes, header.finalRansState, 24, symbolTable, 8);
+    ransState = RansState(ransByteStream, header.finalRansState, 24, symbolTable, 8);
 }
 
 uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)

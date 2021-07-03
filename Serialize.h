@@ -3,11 +3,12 @@
 #include <vector>
 #include <string>
 #include <streambuf>
+#include <iostream>
+#include <fstream>
+#include <assert.h>
 
 // std::hash is garbage
 size_t HashVec(std::vector<uint16_t> const& vec);
-
-typedef std::istreambuf_iterator<uint8_t> ByteIterator;
 
 // TODO remove vector methods and just use iterators
 template<typename T>
@@ -26,6 +27,118 @@ T ReadValue(const std::vector<uint8_t>& inputBytes, uint64_t& readPos)
     readPos += sizeof(value);
     return value;
 }
+
+
+template<typename T>
+class Stream
+{
+public:
+    virtual T operator*() = 0;
+    virtual void operator++() = 0;
+    virtual void operator--() = 0;
+    virtual void operator+=(size_t count) = 0;
+    virtual void operator-=(size_t count) = 0;
+    // clone stream at position
+    virtual std::shared_ptr<Stream<T>> clone() = 0;
+};
+
+template<typename T>
+class VectorIOStream : public Stream<T>
+{
+public:
+    VectorIOStream(const std::vector<uint8_t>* input)
+        : input(input), position(0)
+    {
+
+    }
+    VectorIOStream(const std::vector<uint8_t>* input, size_t position)
+        : input(input), position(position)
+    {
+
+    }
+    T operator*() override
+    {
+        size_t positionCopy = position;
+        return ReadValue<T>(*input, positionCopy);
+    }
+    void operator++() override
+    {
+        position += sizeof(T);
+    }
+    void operator--() override
+    {
+        position -= sizeof(T);
+    }
+    void operator+=(size_t count) override
+    {
+        position += count * sizeof(T);
+    }
+    void operator-=(size_t count) override
+    {
+        position -= count * sizeof(T);
+    }
+    std::shared_ptr<Stream<T>> clone() override
+    {
+        return std::shared_ptr<Stream<T>>(new VectorIOStream<T>(input, position));
+    }
+private:
+    const std::vector<uint8_t>* input;
+    size_t position;
+};
+
+template<typename T>
+class FileIOStream : public Stream<T>
+{
+public:
+    FileIOStream(std::basic_ifstream<uint8_t>* bytes)
+        : bytes(bytes), position(bytes->tellg())
+    {
+
+    }
+    FileIOStream(std::basic_ifstream<uint8_t>* bytes, size_t position)
+        : bytes(bytes), position(position)
+    {
+
+    }
+    T operator*() override
+    {
+        // seek before read in case something else has moved the underlying filestream in the meantime
+        bytes->seekg(position);
+        T value;
+        bytes->read(reinterpret_cast<uint8_t*>(&value), sizeof(value));
+        return value;
+    }
+    void operator++()
+    {
+        position += sizeof(T);
+    }
+    void operator--()
+    {
+        position -= sizeof(T);
+    }
+    void operator+=(size_t count) override
+    {
+        position += count * sizeof(T);
+    }
+    void operator-=(size_t count) override
+    {
+        position -= count * sizeof(T);
+    }
+    std::shared_ptr<Stream<T>> clone() override
+    {
+        return std::shared_ptr<Stream<T>>(new FileIOStream<T>(bytes, position));
+    }
+private:
+    std::basic_ifstream<uint8_t>* bytes;
+    size_t position;
+};
+
+
+typedef Stream<uint8_t> ByteIterator;
+typedef std::shared_ptr<ByteIterator> ByteIteratorPtr;
+
+ByteIteratorPtr ByteStreamFromVector(const std::vector<uint8_t>* input);
+ByteIteratorPtr ByteStreamFromFile(std::basic_ifstream<uint8_t>* bytes);
 
 template<typename T>
 T ReadValue(ByteIterator &inputBytes)
@@ -94,7 +207,124 @@ std::vector<T> ReadVector(const std::vector<uint8_t>& inputBytes, uint64_t& read
 
 // helper function
 template<typename T>
-std::vector<T> ReadVector(ByteIterator bytes)
+std::vector<T> ReadVector(ByteIterator &bytes)
+{
+    // read header
+    VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(bytes);
+
+    // read vector values
+    std::vector<T> outputVector;
+    outputVector.resize(vectorHeader.count);
+    uint64_t vectorSize = outputVector.size() * sizeof(T);
+
+    uint8_t* valuesBytes = reinterpret_cast<uint8_t*>(&outputVector[0]);
+    // basically memcpy
+    for (size_t bytePos = 0; bytePos < vectorSize; ++bytePos)
+    {
+        *valuesBytes = *bytes;
+        ++valuesBytes;
+        ++bytes;
+    }
+
+    return std::move(outputVector);
+}
+
+template<typename T>
+class VectorStream
+{
+public:
+    virtual void push_back(T val) = 0;
+    virtual void pop_back() = 0;
+    virtual size_t size() = 0;
+    virtual T back() = 0;
+    virtual std::vector<uint8_t> get_vec() = 0;
+};
+
+// TODO this name is terrible
+// "vector stream from a vector"
+template<typename T>
+class VectorVectorStream : public VectorStream<T>
+{
+public:
+    void push_back(T val) override
+    {
+        vector.push_back(val);
+    }
+    void pop_back() override
+    {
+        vector.pop_back();
+    }
+    size_t size() override
+    {
+        return vector.size();
+    }
+    T back() override
+    {
+        return vector.back();
+    }
+    std::vector<uint8_t> get_vec() override
+    {
+        return vector;
+    }
+private:
+    std::vector<T> vector;
+};
+
+template<typename T>
+class ByteVectorStream : public VectorStream<T>
+{
+public:
+    ByteVectorStream(ByteIterator& bytes, size_t count)
+        : count(count)
+    {
+        basePtr = bytes.clone();
+        backPtr = basePtr->clone();
+        *backPtr += count - 1;
+    }
+    void push_back(T val) override
+    {
+        // TODO
+        assert(false);
+    }
+    void pop_back() override
+    {
+        --(*backPtr);
+        --count;
+    }
+    size_t size() override
+    {
+        return count;
+    }
+    T back() override
+    {
+        return **backPtr;
+    }
+    std::vector<uint8_t> get_vec() override
+    {
+        // TODO
+        assert(false);
+        return std::vector<uint8_t>();
+    }
+    ByteIteratorPtr basePtr;
+    ByteIteratorPtr backPtr;
+    size_t count;
+};
+
+template<typename T>
+std::shared_ptr<VectorStream<T>> StreamVector(ByteIterator& bytes)
+{
+    // read header
+    VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(bytes);
+    
+    // create stream
+    std::shared_ptr<VectorStream<T>> out = std::shared_ptr<VectorStream<T>>(new ByteVectorStream<T>(bytes, vectorHeader.count));
+    
+    // seek to end of stream
+    bytes += vectorHeader.count * sizeof(T);
+
+    return out;
+}
+
 {
     // read header
     VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(bytes);

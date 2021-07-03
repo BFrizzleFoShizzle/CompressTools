@@ -3,6 +3,8 @@
 #include <vector>
 #include <unordered_map>
 
+#include "Serialize.h"
+
 // Ported from my old Python implementation
 
 // TODO can we replace this with sorted symbol count vector?
@@ -76,9 +78,9 @@ public:
 	// fast constructor if rANS table is already generated
 	RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize);
 	// TODO serialize whole thing?
-	RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
+	RansState(std::shared_ptr<VectorStream<uint8_t>> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
 	// fast constructor if rANS table is already generated
-	RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize);
+	RansState(std::shared_ptr<VectorStream<uint8_t>> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize);
 
 	// Encode symbol
 	void AddSymbol(uint16_t symbol);
@@ -99,7 +101,7 @@ private:
 	uint64_t stateMin;
 	uint64_t stateMax;
 	uint64_t ransState;
-	std::vector<uint8_t> compressedBlocks;
+	std::shared_ptr<VectorStream<uint8_t>> compressedBlocks;
 	// so we can reuse one hunk of memory
 	std::shared_ptr<RansTable> ransTable;
 };

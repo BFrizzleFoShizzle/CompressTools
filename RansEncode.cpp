@@ -182,6 +182,8 @@ RansState::RansState()
 RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
 	: ransTable()
 {
+	compressedBlocks = std::shared_ptr<VectorStream<uint8_t>>(new VectorVectorStream<uint8_t>());
+
 	//std::cout << "STARTING" << std::endl;
 	// Initialize rANS encoding parameters
 	probabilityRange = 1 << probabilityRes;
@@ -202,6 +204,8 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 // fast constructor
 RansState::RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
 {
+	compressedBlocks = std::shared_ptr<VectorStream<uint8_t>>(new VectorVectorStream<uint8_t>());
+
 	// Initialize rANS encoding parameters
 	probabilityRange = 1 << probabilityRes;
 	blockSize = 1 << outputBlockSize;
@@ -214,14 +218,14 @@ RansState::RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolT
 }
 
 // initialize for decoding
-RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
+RansState::RansState(std::shared_ptr<VectorStream<uint8_t>> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
 	: RansState(probabilityRes, counts, outputBlockSize)
 {
 	this->compressedBlocks = compressedBlocks;
 	this->ransState = ransState;
 }
 
-RansState::RansState(std::vector<uint8_t> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
+RansState::RansState(std::shared_ptr<VectorStream<uint8_t>>  compressedBlocks, uint64_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
 	: RansState(probabilityRes, symbolTable, outputBlockSize)
 {
 	this->compressedBlocks = compressedBlocks;
@@ -243,7 +247,7 @@ void RansState::AddSymbol(uint16_t symbol)
 	int count = 0;
 	while (ransState >= blockSize * (stateMin / probabilityRange) * entry.count)
 	{
-		compressedBlocks.push_back(ransState % blockSize);
+		compressedBlocks->push_back(ransState % blockSize);
 		ransState /= blockSize;
 		++count;
 		if (count > 100)
@@ -277,11 +281,11 @@ uint16_t RansState::ReadSymbol()
 	newState -= entry.cumulativeCount;
 
 	// feed data into state as needed
-	while (compressedBlocks.size() > 0 && newState < stateMin)
+	while (compressedBlocks->size() > 0 && newState < stateMin)
 	{
 		newState *= blockSize;
-		newState += compressedBlocks.back();
-		compressedBlocks.pop_back();
+		newState += compressedBlocks->back();
+		compressedBlocks->pop_back();
 	}
 
 	if (newState < stateMin)
@@ -294,7 +298,7 @@ uint16_t RansState::ReadSymbol()
 
 const std::vector<uint8_t> RansState::GetCompressedBlocks()
 {
-	return compressedBlocks;
+	return compressedBlocks->get_vec();
 }
 
 
@@ -306,7 +310,7 @@ uint64_t RansState::GetRansState()
 
 bool RansState::HasData()
 {
-	if (compressedBlocks.size() > 0)
+	if (compressedBlocks->size() > 0)
 		return true;
 	if (ransState != stateMin)
 		return true;

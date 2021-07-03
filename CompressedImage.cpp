@@ -261,9 +261,8 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
 
     // read parent val image
     std::vector<uint8_t> bodyBytes = ReadVector<uint8_t>(bytes);
-    membuf bodyBuf(&bodyBytes[0], &bodyBytes[bodyBytes.size()]);
-    ByteIterator bodyStream(&bodyBuf);
-    std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(parentValImageHeader, bodyStream, parentBlockSymbolTable);
+    ByteIteratorPtr bodyStream = ByteStreamFromVector(&bodyBytes);
+    std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(parentValImageHeader, *bodyStream, parentBlockSymbolTable);
 
     // Decode parent values
     std::vector<uint16_t> rawParentVals = block->GetBottomLevelPixels();
@@ -364,10 +363,10 @@ std::shared_ptr<CompressedImage> CompressedImage::OpenStream(std::string filenam
     // Open file 
     std::basic_ifstream<uint8_t> compressedFile(filename, std::ios::binary);
 
-    ByteIterator bytes(compressedFile);
+    ByteIteratorPtr bytes = ByteStreamFromFile(&compressedFile);
 
     // read headers
-    std::shared_ptr<CompressedImage> image = GenerateFromStream(bytes);
+    std::shared_ptr<CompressedImage> image = GenerateFromStream(*bytes);
     std::cout << "Stream pos: " << compressedFile.tellg() << std::endl;
     image->blockBodiesStart = compressedFile.tellg();
     // close + reopen file (std::move gives buggy behaviour)
@@ -442,9 +441,10 @@ uint16_t CompressedImage::GetPixel(size_t x, size_t y)
         CompressedImageBlockHeader& header = blockHeaders[blockIdx];
 
         fileStream.seekg(blockBodiesStart + header.GetBlockPos());
-        ByteIterator bytes(fileStream);
+        ByteIteratorPtr bytes = ByteStreamFromFile(&fileStream);
 
-        std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(header, bytes, globalSymbolTable);
+
+        std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(header, *bytes, globalSymbolTable);
 
         compressedImageBlocks.emplace(std::make_pair(blockY, blockX), block);
         return block->GetPixel(subBlockX, subBlockY);

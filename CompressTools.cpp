@@ -89,9 +89,8 @@ int main()
         std::cout << "Serializing..." << std::endl; 
         std::vector<uint8_t> imageBytes = compressedImage->Serialize();
         std::cout << "Final encoded bytes: " << imageBytes.size() << std::endl;
-        membuf imageBuf(imageBytes);
-        ByteIterator imageByteIter(&imageBuf);
-        std::shared_ptr<CompressedImage> decodedImage = CompressedImage::Deserialize(imageByteIter);
+        ByteIteratorPtr imageByteIter = ByteStreamFromVector(&imageBytes);
+        std::shared_ptr<CompressedImage> decodedImage = CompressedImage::Deserialize(*imageByteIter);
 
         std::cout << decodedImage->GetTopLOD() << std::endl;
         
@@ -169,6 +168,27 @@ int main()
         {
             std::cerr << "Error opening output file!";
         }
+
+        std::cout << "Image streaming tests..." << std::endl;
+        std::shared_ptr<CompressedImage> streamedImage = CompressedImage::OpenStream("../../../fullmap.cif");
+
+        // test aligned reads
+        std::cout << "Testing aligned reads..." << std::endl;
+        for (int y = 1024; y < 2048; y += 4)
+        {
+            for (int x = 1024; x < 2048; x += 4)
+            {
+                uint16_t sourcePixel = values[y * width + x];
+                uint16_t decodedPixel = streamedImage->GetPixel(x, y);
+                assert(decodedPixel == sourcePixel);
+                if (decodedPixel != sourcePixel)
+                {
+                    std::cout << "Decoded pixel values at (" << x << ", " << y << ") did not match." << std::endl;
+                }
+            }
+        }
+        std::cout << "Done!" << std::endl;
+
     }
     
     FreeImage_Unload(bitmap);
