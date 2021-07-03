@@ -319,6 +319,8 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     image->globalSymbolTable = globalSymbolTable;
     image->globalSymbolCounts = std::move(waveletSymbolCounts);
     image->blockHeaders = std::move(headers);
+    image->currentCacheSize = memoryOverhead;
+    image->memoryOverhead = memoryOverhead;
 
     return std::move(image);
 }
@@ -447,12 +449,21 @@ uint16_t CompressedImage::GetPixel(size_t x, size_t y)
         std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(header, *bytes, globalSymbolTable);
 
         compressedImageBlocks.emplace(std::make_pair(blockY, blockX), block);
+
+        uint16_t value = block->GetPixel(subBlockX, subBlockY);
+
+        // add memory overhead of block
+        currentCacheSize += block->GetMemoryFootprint();
+
         return block->GetPixel(subBlockX, subBlockY);
     }
     else
     {
         std::shared_ptr<CompressedImageBlock> block = foundBlock->second;
-        return block->GetPixel(subBlockX, subBlockY);
+        currentCacheSize -= block->GetMemoryFootprint();
+        uint16_t value = block->GetPixel(subBlockX, subBlockY);
+        currentCacheSize += block->GetMemoryFootprint();
+        return value;
     }
 }
 
@@ -493,4 +504,12 @@ uint32_t CompressedImage::GetTopLOD() const
     }
     // add 1 for "parent vals" LOD
     return LOD + 1;
+}
+
+size_t CompressedImage::GetMemoryUsage() const
+{
+    size_t totalMemUsage = currentCacheSize;
+    // this isn't even slightly accurate, but better than nothing
+    size_t mapSize = compressedImageBlocks.size() * sizeof(std::shared_ptr<CompressedImageBlock>);
+    return currentCacheSize + mapSize;
 }

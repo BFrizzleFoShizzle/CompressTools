@@ -334,6 +334,20 @@ WaveletLayerSize CompressedImageBlock::GetSize() const
     return WaveletLayerSize(header.width, header.height);
 }
 
+
+size_t CompressedImageBlock::GetMemoryFootprint() const
+{
+    size_t memoryUsage = 0;
+    // TODO this could be a pointer to reduce overhead
+    memoryUsage += header.GetMemoryFootprint();
+    // ~90% correct
+    memoryUsage += sizeof(ransState);
+    if(currDecodeLayer)
+        memoryUsage += currDecodeLayer->GetMemoryFootprint();
+
+    return memoryUsage;
+}
+
 void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
 {
     // struct data that can easily be serialized

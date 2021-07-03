@@ -14,6 +14,8 @@ public:
     uint32_t GetWidth() const;
     uint32_t GetHeight() const;
 
+    size_t GetMemoryFootprint() const;
+
 private:
 
     bool IsRoot() const;

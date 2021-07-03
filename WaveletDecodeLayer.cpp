@@ -94,3 +94,8 @@ bool WaveletDecodeLayer::IsRoot() const
 {
     return size.IsRoot();
 }
+
+size_t WaveletDecodeLayer::GetMemoryFootprint() const
+{
+    return sizeof(WaveletDecodeLayer) + (pixelVals.capacity() * sizeof(pixelVals[0]));
+}

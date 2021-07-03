@@ -171,7 +171,7 @@ int main()
 
         std::cout << "Image streaming tests..." << std::endl;
         std::shared_ptr<CompressedImage> streamedImage = CompressedImage::OpenStream("../../../fullmap.cif");
-
+        std::cout << "Initial RAM usage: " << streamedImage->GetMemoryUsage() << std::endl;
         // test aligned reads
         std::cout << "Testing aligned reads..." << std::endl;
         for (int y = 1024; y < 2048; y += 4)
@@ -187,6 +187,8 @@ int main()
                 }
             }
         }
+        std::cout << "End RAM usage: " << streamedImage->GetMemoryUsage() << std::endl;
+        
         std::cout << "Done!" << std::endl;
 
     }

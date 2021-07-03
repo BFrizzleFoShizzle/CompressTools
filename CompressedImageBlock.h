@@ -59,6 +59,8 @@ public:
 
     WaveletLayerSize GetSize() const;
 
+    size_t GetMemoryFootprint() const;
+
 private:
     // decodes down to layer, does nothing if already at/below layer
     // returns current level after decode

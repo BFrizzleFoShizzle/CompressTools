@@ -58,6 +58,8 @@ public:
 
     uint32_t GetTopLOD() const;
 
+    size_t GetMemoryUsage() const;
+
 private:
     // generate header info from stream
     static std::shared_ptr<CompressedImage> GenerateFromStream(ByteIterator& bytes);
@@ -71,6 +73,12 @@ private:
     std::shared_ptr<RansTable> globalSymbolTable;
     std::basic_ifstream<uint8_t> fileStream;
     size_t blockBodiesStart;
+    
+    // used for caching
+    // total approx. RAM usage of image stream
+    size_t currentCacheSize;
+    // min. RAM usage of image stream 
+    size_t memoryOverhead;
 
     SymbolCountDict globalSymbolCounts;
 };
