@@ -249,6 +249,7 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
 
     // read parent val block parents
+    // TODO we could stream this
     std::vector<uint16_t> parentValImageParents = ReadVector<uint16_t>(bytes);
 
     // read parent val block wavelet counts
@@ -260,8 +261,8 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     CompressedImageBlockHeader parentValImageHeader = CompressedImageBlockHeader::Read(bytes, parentValImageParents, parentValsWidth, parentValsHeight);
 
     // read parent val image
-    std::vector<uint8_t> bodyBytes = ReadVector<uint8_t>(bytes);
-    ByteIteratorPtr bodyStream = ByteStreamFromVector(&bodyBytes);
+    std::shared_ptr<VectorStream<uint8_t>> bodyBytes = StreamVector<uint8_t>(bytes);
+    ByteIteratorPtr bodyStream = bodyBytes->get_stream();
     std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(parentValImageHeader, *bodyStream, parentBlockSymbolTable);
 
     // Decode parent values
@@ -442,7 +443,6 @@ uint16_t CompressedImage::GetPixel(size_t x, size_t y)
 
         fileStream.seekg(blockBodiesStart + header.GetBlockPos());
         ByteIteratorPtr bytes = ByteStreamFromFile(&fileStream);
-
 
         std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(header, *bytes, globalSymbolTable);
 

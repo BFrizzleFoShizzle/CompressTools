@@ -238,6 +238,7 @@ public:
     virtual size_t size() = 0;
     virtual T back() = 0;
     virtual std::vector<uint8_t> get_vec() = 0;
+    virtual std::shared_ptr<Stream<T>> get_stream() = 0;
 };
 
 // TODO this name is terrible
@@ -265,6 +266,10 @@ public:
     std::vector<uint8_t> get_vec() override
     {
         return vector;
+    }
+    std::shared_ptr<Stream<T>> get_stream() override
+    {
+        return ByteStreamFromVector(&vector);
     }
 private:
     std::vector<T> vector;
@@ -305,6 +310,10 @@ public:
         assert(false);
         return std::vector<uint8_t>();
     }
+    std::shared_ptr<Stream<T>> get_stream() override
+    {
+        return basePtr->clone();
+    }
     ByteIteratorPtr basePtr;
     ByteIteratorPtr backPtr;
     size_t count;
@@ -324,38 +333,3 @@ std::shared_ptr<VectorStream<T>> StreamVector(ByteIterator& bytes)
 
     return out;
 }
-
-{
-    // read header
-    VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(bytes);
-
-    // read vector values
-    std::vector<T> outputVector;
-    outputVector.resize(vectorHeader.count);
-    uint64_t vectorSize = outputVector.size() * sizeof(T);
-
-    uint8_t* valuesBytes = reinterpret_cast<uint8_t*>(&outputVector[0]);
-    // basically memcpy
-    for (size_t bytePos = 0; bytePos < vectorSize; ++bytePos)
-    {
-        *valuesBytes = *bytes;
-        ++valuesBytes;
-        ++bytes;
-    }
-
-    return std::move(outputVector);
-}
-
-// TODO remove if possible
-// helper methods to convert std::vector to istream
-// adapted from https://stackoverflow.com/questions/7781898/get-an-istream-from-a-char
-struct membuf : std::basic_streambuf<uint8_t>
-{
-    membuf(uint8_t* begin, uint8_t* end) {
-        this->setg(begin, begin, end);
-    }
-    membuf(std::vector<uint8_t> &vector)
-        : membuf(&vector[0], &vector[vector.size()])
-    {
-    }
-};
