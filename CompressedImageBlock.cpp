@@ -23,18 +23,18 @@ CompressedImageBlock::CompressedImageBlock(std::vector<uint16_t> pixelVals, uint
         topLayer = topLayer->GetParentLayer();
     header = CompressedImageBlockHeader(topLayer->GetParentVals(), width, height);
 }
-
+/*
 struct BlockBodyHeader
 {
     uint32_t hash;
 };
-
+*/
 CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, ByteIterator &bytes, std::shared_ptr<RansTable> symbolTable)
     : header(header)
 {
-    BlockBodyHeader bodyHeader = ReadValue<BlockBodyHeader>(bytes);
+    //BlockBodyHeader bodyHeader = ReadValue<BlockBodyHeader>(bytes);
 
-    std::shared_ptr<VectorStream<uint8_t>> ransByteStream = StreamVector<uint8_t>(bytes);
+    std::shared_ptr<VectorStream<uint8_t>> ransByteStream = ReverseStreamVector<uint8_t>(bytes, false);
 
     if (header.finalRansState == 0)
     {
@@ -178,8 +178,9 @@ std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
 void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const std::shared_ptr<RansTable> & globalSymbolTable)
 {
     // add header
-    size_t headerPos = outputBytes.size();
-    outputBytes.resize(outputBytes.size() + sizeof(BlockBodyHeader));
+    //size_t headerPos = outputBytes.size();
+    //outputBytes.resize(outputBytes.size() + sizeof(BlockBodyHeader));
+    //outputBytes.resize(outputBytes.size());
 
     // Get wavelets
     std::vector<uint16_t> blockWavelets = GetWaveletValues();
@@ -203,20 +204,21 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
     //std::cout << "finsihed rANS encode..." << std::endl;
 
     // write rANS encoded wavelets
-    const std::vector<uint8_t>& ransEncondedWavelets = waveletRansState->GetCompressedBlocks();
+    std::vector<uint8_t> ransEncondedWavelets = waveletRansState->GetCompressedBlocks();
+    // reverse
+    std::reverse(ransEncondedWavelets.begin(), ransEncondedWavelets.end());
     WriteVector(outputBytes, ransEncondedWavelets);
 
     // write header
-    BlockBodyHeader header;
-    header.hash = waveletsHash;
-    memcpy(&outputBytes[headerPos], &header, sizeof(header));
+    //BlockBodyHeader header;
+    //header.hash = waveletsHash;
+    //memcpy(&outputBytes[headerPos], &header, sizeof(header));
 }
 
 std::vector<uint16_t> CompressedImageBlock::GetBottomLevelPixels()
 {
     return GetLevelPixels(0);
 }
-
 
 uint16_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
 {

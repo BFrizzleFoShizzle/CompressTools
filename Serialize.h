@@ -28,7 +28,6 @@ T ReadValue(const std::vector<uint8_t>& inputBytes, uint64_t& readPos)
     return value;
 }
 
-
 template<typename T>
 class Stream
 {
@@ -319,6 +318,69 @@ public:
     size_t count;
 };
 
+// swap back and front
+// has *EXTREME* late binding fo dat mad perf gainz
+template<typename T>
+class ReverseByteVectorStream : public VectorStream<T>
+{
+public:
+    ReverseByteVectorStream(ByteIterator& bytes, size_t count)
+        : count(count)
+    {
+        basePtr = bytes.clone();
+    }
+    ReverseByteVectorStream(ByteIterator& bytes)
+        : count(-1)
+    {
+        basePtr = bytes.clone();
+    }
+    void push_back(T val) override
+    {
+        // TODO
+        assert(false);
+    }
+    void pop_back() override
+    {
+        init();
+        ++(*basePtr);
+        --count;
+    }
+    size_t size() override
+    {
+        init();
+        return count;
+    }
+    T back() override
+    {
+        init();
+        return **basePtr;
+    }
+    std::vector<uint8_t> get_vec() override
+    {
+        // TODO
+        assert(false);
+        return std::vector<uint8_t>();
+    }
+    std::shared_ptr<Stream<T>> get_stream() override
+    {
+        init();
+        return basePtr->clone();
+    }
+private:
+    void init()
+    {
+        if (count == -1)
+        {
+            // read header
+            VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(*basePtr);
+            count = vectorHeader.count;
+        }
+    }
+    ByteIteratorPtr basePtr;
+    size_t count;
+    bool initialized;
+};
+
 template<typename T>
 std::shared_ptr<VectorStream<T>> StreamVector(ByteIterator& bytes)
 {
@@ -330,6 +392,33 @@ std::shared_ptr<VectorStream<T>> StreamVector(ByteIterator& bytes)
     
     // seek to end of stream
     bytes += vectorHeader.count * sizeof(T);
+
+    return out;
+}
+
+// WARNING: if consumeImmediate = true, does NO READS and DOES NOT move ptr forward!
+template<typename T>
+std::shared_ptr<VectorStream<T>> ReverseStreamVector(ByteIterator& bytes, bool consumeImmediate = false)
+{
+    std::shared_ptr<VectorStream<T>> out;
+
+    if (consumeImmediate)
+    {
+        // read header
+        VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(bytes);
+
+        // create stream
+        out = std::shared_ptr<VectorStream<T>>(new ReverseByteVectorStream<T>(bytes, vectorHeader.count));
+
+        // seek to end of stream
+        bytes += vectorHeader.count * sizeof(T);
+    }
+    else
+    {
+        // create stream (it reads it's own header)
+        out = std::shared_ptr<VectorStream<T>>(new ReverseByteVectorStream<T>(bytes));
+    }
+
 
     return out;
 }

@@ -66,7 +66,7 @@ private:
 
     CompressedImageHeader header;
     // Wavelet image containing parent vals
-    std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<CompressedImageBlock>> compressedImageBlocks;
+    std::vector<std::shared_ptr<CompressedImageBlock>> compressedImageBlocks;
 
     // used for streamed decode
     std::vector<CompressedImageBlockHeader> blockHeaders;
