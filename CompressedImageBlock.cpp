@@ -55,20 +55,30 @@ uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
     if (currDecodeLayer)
     {
         ++decodedLevel;
-        for (WaveletLayerSize size : waveletLayerSizes)
+
+        WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
+        while (!size.IsRoot())
         {
             if (size.GetHeight() == currDecodeLayer->GetHeight()
                 && size.GetHeight() == currDecodeLayer->GetWidth())
                 break;
             ++decodedLevel;
+            size = size.GetParentSize();
         }
+    }
+
+    WaveletLayerSize rootSize = WaveletLayerSize(header.width, header.height);
+    uint32_t topLayer = 1;
+    while (!rootSize.IsRoot())
+    {
+        rootSize = rootSize.GetParentSize();
+        ++topLayer;
     }
     
     // Special case - root layer
     // TODO try and refactor this out
     if (decodedLevel == -1)
     {
-        WaveletLayerSize rootSize = waveletLayerSizes.back();
         size_t waveletsCount = rootSize.GetWaveletCount();
 
         // read wavelets
@@ -78,8 +88,8 @@ uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
         
         // create root layer
         currDecodeLayer = std::make_shared<WaveletDecodeLayer>(rootWavelets, header.parentVals, rootSize.GetWidth(), rootSize.GetHeight());
-        
-        decodedLevel = waveletLayerSizes.size() - 1;
+
+        decodedLevel = topLayer - 1;
     }
 
 
@@ -89,14 +99,21 @@ uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
         uint32_t newLevel = decodedLevel - 1;
 
         // error-checking
-        assert(newLevel < waveletLayerSizes.size());
         if (!ransState.IsValid() && ransState.HasData())
         {
             std::cout << "Decode requested, but rANS is unhappy!" << std::endl;
             return -1;
         }
 
-        WaveletLayerSize newLayerSize = waveletLayerSizes[newLevel];
+        // find layer size
+        WaveletLayerSize newLayerSize = WaveletLayerSize(header.width, header.height);
+        uint32_t layer = 0;
+        while (layer < newLevel)
+        {
+            newLayerSize = newLayerSize.GetParentSize();
+            ++layer;
+        }
+
         size_t waveletsCount = newLayerSize.GetWaveletCount();
         
         // read wavelets
@@ -211,19 +228,14 @@ std::vector<uint16_t> CompressedImageBlock::GetBottomLevelPixels()
 
 uint16_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
 {
-    // Generate layer sizes
-    WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
-
-    std::vector<WaveletLayerSize> waveletLayerSizes;
-    waveletLayerSizes.push_back(size);
-    while (!size.IsRoot())
-    {
-        size = WaveletLayerSize(size.GetParentWidth(), size.GetParentHeight());
-        waveletLayerSizes.push_back(size);
-    }
-
     // level of parent values
-    uint32_t rootLevel = waveletLayerSizes.size();
+    WaveletLayerSize rootSize = WaveletLayerSize(header.width, header.height);
+    uint32_t rootLevel = 1;
+    while (!rootSize.IsRoot())
+    {
+        rootSize = rootSize.GetParentSize();
+        ++rootLevel;
+    }
 
     // Check what level we're on
     // -1 = no layer decoded
@@ -231,12 +243,15 @@ uint16_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
     if (currDecodeLayer)
     {
         ++decodedLevel;
-        for (WaveletLayerSize size : waveletLayerSizes)
+
+        WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
+        while (!size.IsRoot())
         {
             if (size.GetHeight() == currDecodeLayer->GetHeight()
                 && size.GetHeight() == currDecodeLayer->GetWidth())
                 break;
             ++decodedLevel;
+            size = size.GetParentSize();
         }
     }
     else
@@ -259,7 +274,7 @@ uint16_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
     // special case - value is root parent value
     if (positionLevel == rootLevel)
     {
-        uint32_t parentValIdx = shiftedY * waveletLayerSizes.back().GetParentWidth() + shiftedX;
+        uint32_t parentValIdx = shiftedY * rootSize.GetParentWidth() + shiftedX;
         return header.parentVals[parentValIdx];
     }
 
