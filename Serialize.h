@@ -28,6 +28,22 @@ T ReadValue(const std::vector<uint8_t>& inputBytes, uint64_t& readPos)
     return value;
 }
 
+// tellg() + seekg() have TERRIBLE performance on windows, so we roll our own
+class FastFileStream
+{
+public:
+    // TODO remove
+    FastFileStream();
+    FastFileStream(std::string filename);
+    void Seek(size_t newPosition);
+    size_t GetPosition() const;
+    void Read(void* dest, size_t length);
+    void Close();
+private:
+    size_t position;
+    std::basic_ifstream<uint8_t> fileStream;
+};
+
 template<typename T>
 class Stream
 {
@@ -89,12 +105,12 @@ template<typename T>
 class FileIOStream : public Stream<T>
 {
 public:
-    FileIOStream(std::basic_ifstream<uint8_t>* bytes)
-        : bytes(bytes), position(bytes->tellg())
+    FileIOStream(FastFileStream* bytes)
+        : bytes(bytes), position(bytes->GetPosition())
     {
 
     }
-    FileIOStream(std::basic_ifstream<uint8_t>* bytes, size_t position)
+    FileIOStream(FastFileStream* bytes, size_t position)
         : bytes(bytes), position(position)
     {
 
@@ -102,9 +118,9 @@ public:
     T operator*() override
     {
         // seek before read in case something else has moved the underlying filestream in the meantime
-        bytes->seekg(position);
+        bytes->Seek(position);
         T value;
-        bytes->read(reinterpret_cast<uint8_t*>(&value), sizeof(value));
+        bytes->Read(&value, sizeof(value));
         return value;
     }
     void operator++()
@@ -128,7 +144,7 @@ public:
         return std::shared_ptr<Stream<T>>(new FileIOStream<T>(bytes, position));
     }
 private:
-    std::basic_ifstream<uint8_t>* bytes;
+    FastFileStream* bytes;
     size_t position;
 };
 
@@ -137,7 +153,7 @@ typedef Stream<uint8_t> ByteIterator;
 typedef std::shared_ptr<ByteIterator> ByteIteratorPtr;
 
 ByteIteratorPtr ByteStreamFromVector(const std::vector<uint8_t>* input);
-ByteIteratorPtr ByteStreamFromFile(std::basic_ifstream<uint8_t>* bytes);
+ByteIteratorPtr ByteStreamFromFile(FastFileStream* bytes);
 
 template<typename T>
 T ReadValue(ByteIterator &inputBytes)

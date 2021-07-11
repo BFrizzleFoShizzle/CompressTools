@@ -374,19 +374,48 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(ByteIterator &byte
 std::shared_ptr<CompressedImage> CompressedImage::OpenStream(std::string filename)
 {
     // Open file 
-    std::basic_ifstream<uint8_t> compressedFile(filename, std::ios::binary);
+    FastFileStream compressedFile(filename);
 
     ByteIteratorPtr bytes = ByteStreamFromFile(&compressedFile);
 
     // read headers
     std::shared_ptr<CompressedImage> image = GenerateFromStream(*bytes);
-    std::cout << "Stream pos: " << compressedFile.tellg() << std::endl;
-    image->blockBodiesStart = compressedFile.tellg();
+    std::cout << "Stream pos: " << compressedFile.GetPosition() << std::endl;
+    image->blockBodiesStart = compressedFile.GetPosition();
     // close + reopen file (std::move gives buggy behaviour)
-    compressedFile.close();
-    image->fileStream = std::basic_ifstream<uint8_t>(filename, std::ios::binary);
+    compressedFile.Close();
+    image->fileStream = FastFileStream(filename);
 
     return image;
+}
+
+// Gets/creates the block for the given index
+std::shared_ptr<CompressedImageBlock> CompressedImage::GetBlock(size_t index)
+{
+    std::shared_ptr<CompressedImageBlock> foundBlock = compressedImageBlocks[index];
+
+    // create block if needed
+    if (!foundBlock)
+    {
+        CompressedImageBlockHeader& header = blockHeaders[index];
+
+        // seek to block body start
+        fileStream.Seek(blockBodiesStart + header.GetBlockPos());
+        ByteIteratorPtr bytes = ByteStreamFromFile(&fileStream);
+
+        std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(header, *bytes, globalSymbolTable);
+
+        compressedImageBlocks[index] = block;
+
+        // add memory overhead of block
+        currentCacheSize += block->GetMemoryFootprint();
+
+        return block;
+    }
+    else
+    {
+        return foundBlock;
+    }
 }
 
 std::vector<uint16_t> CompressedImage::GetBottomLevelPixels()
@@ -404,8 +433,15 @@ std::vector<uint16_t> CompressedImage::GetBottomLevelPixels()
             uint32_t blockW = std::min(header.width - blockStartX, header.blockSize);
             uint32_t blockH = std::min(header.height - blockStartY, header.blockSize);
             size_t blockIdx = blockY * GetWidthInBlocks() + blockX;
-            std::vector<uint16_t> blockPixels = compressedImageBlocks[blockIdx]->GetBottomLevelPixels();
 
+            // creates if necessary
+            std::shared_ptr<CompressedImageBlock> block = GetBlock(blockIdx);
+
+            currentCacheSize -= block->GetMemoryFootprint();
+            std::vector<uint16_t> blockPixels = block->GetBottomLevelPixels();
+            currentCacheSize += block->GetMemoryFootprint();
+
+            // copy pixels
             for (uint32_t pixY = 0; pixY < blockH; ++pixY)
             {
                 for (uint32_t pixX = 0; pixX < blockW; ++pixX)
@@ -423,6 +459,7 @@ std::vector<uint16_t> CompressedImage::GetBottomLevelPixels()
 std::vector<uint8_t> CompressedImage::GetBlockLevels()
 {
     std::vector<uint8_t> blockLevels;
+    uint32_t topLevel = GetTopLOD();
     for (uint32_t blockStartY = 0; blockStartY < header.height; blockStartY += header.blockSize)
     {
         for (uint32_t blockStartX = 0; blockStartX < header.width; blockStartX += header.blockSize)
@@ -431,9 +468,13 @@ std::vector<uint8_t> CompressedImage::GetBlockLevels()
             uint32_t blockY = blockStartY / header.blockSize;
             size_t blockIdx = blockY * GetWidthInBlocks() + blockX;
 
+            // DON'T use GetBlock, since that would create a block if none exists
             std::shared_ptr<CompressedImageBlock> block = compressedImageBlocks[blockIdx];
 
-            blockLevels.push_back(block->GetLevel());
+            if (!block)
+                blockLevels.push_back(topLevel);
+            else
+                blockLevels.push_back(block->GetLevel());
         }
     }
     return blockLevels;
@@ -447,35 +488,13 @@ uint16_t CompressedImage::GetPixel(size_t x, size_t y)
     uint32_t subBlockY = y % header.blockSize;
     size_t blockIdx = blockY * GetWidthInBlocks() + blockX;
 
-    std::shared_ptr<CompressedImageBlock> foundBlock = compressedImageBlocks[blockIdx];
-    // create block if needed
-    if (!foundBlock)
-    {
-        //std::cout << "Block not decompressed..." << std::endl;
-        size_t blockIdx = blockY * GetWidthInBlocks() + blockX;
-        CompressedImageBlockHeader& header = blockHeaders[blockIdx];
+    std::shared_ptr<CompressedImageBlock> block = GetBlock(blockIdx);
 
-        fileStream.seekg(blockBodiesStart + header.GetBlockPos());
-        ByteIteratorPtr bytes = ByteStreamFromFile(&fileStream);
-
-        std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(header, *bytes, globalSymbolTable);
-
-        compressedImageBlocks[blockIdx] =  block;
-
-        uint16_t value = block->GetPixel(subBlockX, subBlockY);
-
-        // add memory overhead of block
-        currentCacheSize += block->GetMemoryFootprint();
-
-        return block->GetPixel(subBlockX, subBlockY);
-    }
-    else
-    {
-        currentCacheSize -= foundBlock->GetMemoryFootprint();
-        uint16_t value = foundBlock->GetPixel(subBlockX, subBlockY);
-        currentCacheSize += foundBlock->GetMemoryFootprint();
-        return value;
-    }
+    currentCacheSize -= block->GetMemoryFootprint();
+    uint16_t value = block->GetPixel(subBlockX, subBlockY);
+    currentCacheSize += block->GetMemoryFootprint();
+    
+    return value;
 }
 
 uint32_t CompressedImage::GetWidth() const

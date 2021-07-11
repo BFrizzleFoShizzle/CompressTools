@@ -15,7 +15,45 @@ ByteIteratorPtr ByteStreamFromVector(const std::vector<uint8_t>* input)
     return std::shared_ptr<Stream<uint8_t>>(new VectorIOStream<uint8_t>(input));
 }
 
-ByteIteratorPtr ByteStreamFromFile(std::basic_ifstream<uint8_t>* bytes)
+ByteIteratorPtr ByteStreamFromFile(FastFileStream* bytes)
 {
     return std::shared_ptr<Stream<uint8_t>>(new FileIOStream<uint8_t>(bytes));
+}
+
+FastFileStream::FastFileStream(std::string filename)
+    : fileStream(filename, std::ios::binary), position(0)
+{
+
+}
+
+FastFileStream::FastFileStream()
+    : fileStream(), position(-1)
+{
+
+}
+
+void FastFileStream::Seek(size_t newPosition)
+{
+    if (position != newPosition)
+    {
+        // TODO late bind?
+        fileStream.seekg(newPosition);
+        position = newPosition;
+    }
+}
+
+size_t FastFileStream::GetPosition() const
+{
+    return position;
+}
+
+void FastFileStream::Read(void* dest, size_t length)
+{
+    fileStream.read(reinterpret_cast<uint8_t*>(dest), length);
+    position += length;
+}
+
+void FastFileStream::Close()
+{
+    fileStream.close();
 }

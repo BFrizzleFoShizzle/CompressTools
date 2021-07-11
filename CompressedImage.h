@@ -61,6 +61,8 @@ public:
     size_t GetMemoryUsage() const;
 
 private:
+    std::shared_ptr<CompressedImageBlock> GetBlock(size_t index);
+
     // generate header info from stream
     static std::shared_ptr<CompressedImage> GenerateFromStream(ByteIterator& bytes);
 
@@ -71,7 +73,7 @@ private:
     // used for streamed decode
     std::vector<CompressedImageBlockHeader> blockHeaders;
     std::shared_ptr<RansTable> globalSymbolTable;
-    std::basic_ifstream<uint8_t> fileStream;
+    FastFileStream fileStream;
     size_t blockBodiesStart;
     
     // used for caching

@@ -49,17 +49,6 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, By
 
 uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
 {
-    // Generate layer sizes
-    WaveletLayerSize size = WaveletLayerSize(header.width, header.height);
-
-    std::vector<WaveletLayerSize> waveletLayerSizes;
-    waveletLayerSizes.push_back(size);
-    while (!size.IsRoot())
-    {
-        size = size.GetParentSize();
-        waveletLayerSizes.push_back(size);
-    }
-
     // Check what level we're on
     // -1 = no layer decoded
     uint32_t decodedLevel = -1;
