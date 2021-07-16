@@ -12,15 +12,23 @@ struct CompressToolsLib::CompressedImageFile
 {
 	std::string filename;
 	std::shared_ptr<CompressedImage> image;
+	// TODO REMOVE AFTER TESTING used if preloading
+	std::vector<uint16_t> decodedPixels;
 };
 
-__declspec(dllexport) CompressedImageFileHdl CompressToolsLib::OpenImage(const char* filename)
+__declspec(dllexport) CompressedImageFileHdl CompressToolsLib::OpenImage(const char* filename, ImageMode mode)
 {
 	// decode
 	CompressedImageFileHdl imageHdl = new CompressedImageFile();
 	imageHdl->filename = filename;
 	imageHdl->image = CompressedImage::OpenStream(filename);
-
+	if (mode == ImageMode::Preload)
+		imageHdl->decodedPixels = imageHdl->image->GetBottomLevelPixels();
+	// TODO temporary - delete this later
+	float memoryUsage = (imageHdl->image->GetMemoryUsage() / 1024) / 1024.0f;
+	std::cout << "Heightmap memory usage: " << memoryUsage << "MB" << std::endl;
+	// free up memory
+	imageHdl->image->ClearBlockCache();
 	return imageHdl;
 }
 
@@ -35,7 +43,13 @@ __declspec(dllexport) uint16_t CompressToolsLib::ReadHeightValue(CompressedImage
 		//MessageBoxA(0, msg.str().c_str(), "Debug", MB_OK);
 		return 0;
 	}
-	return image->image->GetPixel(x, y);
+	uint16_t val;
+	// HACK if preloading use preloaded cache
+	if(image->decodedPixels.size() > 0)
+		val = image->decodedPixels[y * image->image->GetWidth() + x];
+	else
+		val = image->image->GetPixel(x, y);
+	return val;
 }
 
 __declspec(dllexport) void CompressToolsLib::CloseImage(CompressedImageFileHdl image)
@@ -45,12 +59,14 @@ __declspec(dllexport) void CompressToolsLib::CloseImage(CompressedImageFileHdl i
 
 __declspec(dllexport) uint32_t CompressToolsLib::GetImageWidthInBlocks(CompressedImageFileHdl image)
 {
-	return image->image->GetWidthInBlocks();
+	uint32_t val = image->image->GetWidthInBlocks();
+	return val;
 }
 
 __declspec(dllexport) uint32_t CompressToolsLib::GetImageHeightInBlocks(CompressedImageFileHdl image)
 {
-	return image->image->GetHeightInBlocks();
+	uint32_t val = image->image->GetHeightInBlocks();
+	return val;
 }
 
 // outputs w
@@ -62,10 +78,21 @@ __declspec(dllexport) void CompressToolsLib::GetBlockLODs(CompressedImageFileHdl
 
 __declspec(dllexport) uint32_t CompressToolsLib::GetMaxLOD(CompressedImageFileHdl image)
 {
-	return image->image->GetTopLOD();
+	uint32_t val = image->image->GetTopLOD();
+	return val;
 }
 
 __declspec(dllexport) size_t CompressToolsLib::GetMemoryUsage(CompressedImageFileHdl image)
 {
-	return image->image->GetMemoryUsage();
+	size_t val = image->image->GetMemoryUsage();
+	return val;
+}
+
+__declspec(dllexport) void CompressToolsLib::GetBottomPixels(CompressedImageFileHdl image, uint16_t* values)
+{
+	std::vector<uint16_t> vals = image->image->GetBottomLevelPixels();
+	memcpy(values, &vals[0], sizeof(uint16_t) * vals.size());
+	return;
+}
+
 }

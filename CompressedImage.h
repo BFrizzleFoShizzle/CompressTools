@@ -60,6 +60,8 @@ public:
 
     size_t GetMemoryUsage() const;
 
+    void ClearBlockCache();
+
 private:
     std::shared_ptr<CompressedImageBlock> GetBlock(size_t index);
 

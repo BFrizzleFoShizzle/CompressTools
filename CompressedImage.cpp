@@ -543,3 +543,13 @@ size_t CompressedImage::GetMemoryUsage() const
     size_t mapSize = compressedImageBlocks.capacity() * sizeof(std::shared_ptr<CompressedImageBlock>);
     return currentCacheSize + mapSize;
 }
+
+void CompressedImage::ClearBlockCache()
+{
+    for (int i = 0; i < compressedImageBlocks.size(); ++i)
+    {
+        // replace with null ptr
+        if (compressedImageBlocks[i])
+            compressedImageBlocks[i] = std::shared_ptr<CompressedImageBlock>();
+    }
+}

@@ -62,7 +62,7 @@ int main()
     std::cout << "Opening image..." << std::endl;
     FreeImage_Initialise();
     FreeImage_SetOutputMessage(FreeImageErrorHandler);
-    FIBITMAP *bitmap = FreeImage_Load(FREE_IMAGE_FORMAT::FIF_TIFF, "../../../fullmap.tif", TIFF_DEFAULT);
+    FIBITMAP *bitmap = FreeImage_Load(FREE_IMAGE_FORMAT::FIF_TIFF, "./data/newland/land/fullmap.tif", TIFF_DEFAULT);
     
     int width = FreeImage_GetWidth(bitmap);
     int height = FreeImage_GetHeight(bitmap);
@@ -158,7 +158,7 @@ int main()
 
         // write to disk
         std::cout << "Writing bytes..." << std::endl;
-        std::ofstream compressedFile("../../../fullmap.cif", std::ios::binary);
+        std::ofstream compressedFile("./data/newland/land/fullmap.cif", std::ios::binary);
         if (compressedFile.is_open())
         {
             compressedFile.write((const char*)&imageBytes[0], imageBytes.size());
@@ -170,7 +170,7 @@ int main()
         }
 
         std::cout << "Image streaming tests..." << std::endl;
-        std::shared_ptr<CompressedImage> streamedImage = CompressedImage::OpenStream("../../../fullmap.cif");
+        std::shared_ptr<CompressedImage> streamedImage = CompressedImage::OpenStream("./data/newland/land/fullmap.cif");
         std::cout << "Initial RAM usage: " << streamedImage->GetMemoryUsage() << std::endl;
         // test aligned reads
         std::cout << "Testing aligned reads..." << std::endl;
