@@ -6,6 +6,8 @@
 
 #include "RansEncode.h"
 
+const uint32_t COMPRESSED_LOOKUP_BINS = 4096;
+const uint32_t ROOT_BIN_SIZE = 3;
 // Ported from my old Python implementation
 
 // helper for deterministic entropy sorting
@@ -33,17 +35,109 @@ std::vector<SymbolCount> EntropySortSymbols(SymbolCountDict dict)
 	return std::move(countsVec);
 }
 
-RansTable::RansTable(SymbolCountDict counts)
+CDFTable::CDFTable(SymbolCountDict counts, uint32_t probabilityRes)
 {
 	uint32_t cumulativeCount = 0;
 	std::vector<SymbolCount> sortedCounts = EntropySortSymbols(counts);
+	symbols.reserve(sortedCounts.size());
+	CDFVals.reserve(sortedCounts.size());
+	symbolCounts.reserve(sortedCounts.size());
 	for (auto symbolCount : sortedCounts)
 	{
+		symbols.push_back(symbolCount.symbol);
+		CDFVals.push_back(cumulativeCount);
+		symbolCounts.push_back(symbolCount.count);
+		cumulativeCount += symbolCount.count;
+	}
+}
+
+RansEntry CDFTable::GetSymbol(uint32_t symbolCDF)
+{
+	uint32_t symbolIdx = 0;
+	for (; symbolIdx <CDFVals.size() - 1; ++symbolIdx)
+	{
+		if (/*CDFVals[symbolIdx] <= symbolCDF && */CDFVals[symbolIdx + 1] > symbolCDF)
+			break;
+	}
+	RansEntry ransEntry = RansEntry(symbols[symbolIdx], symbolCounts[symbolIdx], CDFVals[symbolIdx]);
+	//if (!(ransEntry.cumulativeCount <= symbolCDF && symbolCDF < ransEntry.cumulativeCount + ransEntry.count))
+	//	std::cout << "CDF lookup doesn't match CDF!" << std::endl;
+	return ransEntry;
+}
+
+RansTable::RansTable(SymbolCountDict counts, uint32_t probabilityRes)
+	: cdfTable(counts, probabilityRes)
+{
+	/*
+	uint32_t cumulativeCount = 0;
+	std::vector<SymbolCount> sortedCounts = EntropySortSymbols(counts);
+	// here's the thought: at some point the average number of items in a bucket becomes greater than the number
+	// of rANS entries from the start of the probability table
+	// That point is the "pivot" where binning starts increasing performance
+	// So, we treat all symbols with CDF below pivot as being in same bin starting at zero
+	// For all other blocks (with CDF >= pivot), bin is found using lookup table
+	binLookupTable.reserve(COMPRESSED_LOOKUP_BINS + 1);
+	size_t currBinMaxCDF = 0;
+	binningPivot = -1;
+	for (auto symbolCount : sortedCounts)
+	{
+		// bootleg - first N items are in "block zero"
+		if (symbolTable.size() == ROOT_BIN_SIZE)
+		{
+			float cdf = ((float)cumulativeCount) / (1 << probabilityRes);
+			binningPivot = cumulativeCount;
+			uint32_t remainingCDF = (1 << probabilityRes) - cumulativeCount;
+			cdfBinDivisor = remainingCDF / COMPRESSED_LOOKUP_BINS;
+			std::cout << cdf << std::endl;
+		}
+		/*
+		if (binPivot == -1)
+		{
+			// num. symbols before current in root block
+			uint32_t currBlockItems = cdfTable.size();
+			uint32_t remainingItems = sortedCounts.size() - currBlockItems;
+			uint32_t avgSymbolsPerBlock = remainingItems / COMPRESSED_LOOKUP_BINS;
+			// if the root block has as many symbols as the rest of the file will, on average, emit root block + update pivot
+			// curr symbol is now in binLookupTable[0]
+			if (currBlockItems > avgSymbolsPerBlock)
+			{
+				float cdf = ((float)cumulativeCount) / (1 << probabilityRes);
+				float pdf = ((float)symbolCount.count) / (1 << probabilityRes);
+				// 
+				float bpdf = ((float)symbolCount.count) / ((1 << probabilityRes) - cumulativeCount);
+				std::cout << currBlockItems << " " << cdf << " " << pdf << " " << bpdf << std::endl;
+				binPivot = cumulativeCount;
+				uint32_t remainingCDF = (1 << probabilityRes) - cumulativeCount;
+				cdfBinDivisor = remainingCDF / COMPRESSED_LOOKUP_BINS;
+			}
+			
+		}
+		*/
+		/*
+		if (binningPivot != -1)
+		{
+			// if the total CDF is outside the range of the current bin, need a new bin pointed at new symbol
+			// e.g. size 8 CDF at 0 goes from 0-7, hence the -1
+			uint32_t scaledMaxCDF = ((cumulativeCount + symbolCount.count) - binningPivot) - 1;
+			while (currBinMaxCDF <= scaledMaxCDF)
+			{
+				binLookupTable.push_back(symbolTable.size());
+				currBinMaxCDF += cdfBinDivisor;
+				if (binLookupTable.size() < 10)
+					std::cout << symbolTable.size() << std::endl;
+				if ((COMPRESSED_LOOKUP_BINS - binLookupTable.size()) < 10)
+					std::cout << symbolTable.size() << std::endl;
+			}
+		}
+		
 		RansEntry ransEntry = RansEntry(symbolCount.symbol, symbolCount.count, cumulativeCount);
 		symbolTable.emplace(symbolCount.symbol, ransEntry);
 		cdfTable.push_back(ransEntry);
 		cumulativeCount += symbolCount.count;
 	}
+	if (binLookupTable.size() != COMPRESSED_LOOKUP_BINS)
+		std::cerr << "WRONG NUMBER OF rANS LOOKUP TABLE BINS!" << std::endl;
+		*/
 }
 
 RansEntry RansTable::GetSymbolEntry(uint16_t symbol)
@@ -54,11 +148,32 @@ RansEntry RansTable::GetSymbolEntry(uint16_t symbol)
 // Cumulative probability to rANS entry
 RansEntry RansTable::GetSymbolEntryFromFreq(uint32_t prob)
 {
-	for (auto entry : cdfTable)
+	return cdfTable.GetSymbol(prob);
+	/*
+	auto entry = cdfTable.begin();
+	if (prob >= binningPivot)
 	{
-		if (entry.cumulativeCount <= prob && prob < entry.cumulativeCount + entry.count)
-			return entry;
+		const uint32_t lookupBin = (prob - binningPivot) / cdfBinDivisor;
+		if (lookupBin >= binLookupTable.size())
+			std::cout << "OUT-OF-BOUNDS CDF LOOKUP1! " << lookupBin << std::endl;
+		uint32_t startPos = binLookupTable[lookupBin];
+
+		if (startPos >= cdfTable.size())
+			std::cout << "OUT-OF-BOUNDS CDF LOOKUP2!" << std::endl;
+
+		entry += startPos;
+
+		if (entry->cumulativeCount > prob)
+			std::cout << "CDF ENTRY SKIPPED!" << std::endl;
 	}
+
+	while (entry != cdfTable.end())
+	{
+		if (entry->cumulativeCount <= prob && prob < entry->cumulativeCount + entry->count)
+			return *entry;
+		++entry;
+	}
+	*/
 	// TODO ERROR
 	assert(false);
 }
@@ -68,7 +183,8 @@ size_t RansTable::GetMemoryFootprint() const
 {
 	// this isn't that accurate
 	size_t mapSize = std::max(symbolTable.bucket_count(), symbolTable.size()) * sizeof(std::unordered_map< uint16_t, RansEntry>::value_type);
-	size_t vectorSize = cdfTable.capacity() * sizeof(RansEntry);
+	// TODO UPDATE
+	size_t vectorSize = 0;// cdfTable.capacity() * sizeof(RansEntry);
 
 	return sizeof(RansTable) + mapSize + vectorSize;
 }
@@ -196,7 +312,7 @@ RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t o
 	//std::cout << "generating rANS table..." << std::endl;
 	// Our quantized probabilites now sum to exactly probabilityRange,
 	// which is require for rANS to work
-	ransTable = std::make_shared<RansTable>(quantizedCounts);
+	ransTable = std::make_shared<RansTable>(quantizedCounts, probabilityRes);
 	// You can technically set initial rANS state to anything, but I choose the min. val
 	ransState = stateMin;
 }

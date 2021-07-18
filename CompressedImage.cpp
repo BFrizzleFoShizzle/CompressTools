@@ -112,7 +112,7 @@ std::vector<uint8_t> CompressedImage::Serialize()
     size_t probabilityRes = 24;
     size_t probabilityRange = 1 << probabilityRes;
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(globalSymbolCounts, probabilityRange);
-    globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
+    globalSymbolTable = std::make_shared<RansTable>(quantizedCounts, probabilityRes);
 
     // Generate wavelet image for parent vals
    // parent block parents, wavelet counts, header, body
@@ -164,7 +164,7 @@ std::vector<uint8_t> CompressedImage::Serialize()
     WriteSymbolTable(byteStream, parentValsWaveletSymbolCounts);
     // generate rANS symbol table (currently costly)
     SymbolCountDict parentQuantizedCounts = GenerateQuantizedCounts(parentValsWaveletSymbolCounts, probabilityRange);
-    std::shared_ptr<RansTable> parentSymbolTable = std::make_shared<RansTable>(parentQuantizedCounts);
+    std::shared_ptr<RansTable> parentSymbolTable = std::make_shared<RansTable>(parentQuantizedCounts, probabilityRes);
 
     // Prepare parent val block body + fill in header
     std::vector<uint8_t> parentValsBodyBytes;
@@ -245,8 +245,7 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     size_t probabilityRes = 24;
     size_t probabilityRange = 1 << probabilityRes;
     SymbolCountDict quantizedCounts = GenerateQuantizedCounts(waveletSymbolCounts, probabilityRange);
-    std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts);
-
+    std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts, probabilityRes);
     // read parent val block parents
     // TODO we could stream this
     std::vector<uint16_t> parentValImageParents = ReadVector<uint16_t>(bytes);
@@ -254,7 +253,7 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     // read parent val block wavelet counts
     SymbolCountDict parentValImageWaveletCounts = ReadSymbolTable(bytes);
     SymbolCountDict quantizedParentBlockCounts = GenerateQuantizedCounts(parentValImageWaveletCounts, probabilityRange);
-    std::shared_ptr<RansTable> parentBlockSymbolTable = std::make_shared<RansTable>(quantizedParentBlockCounts);
+    std::shared_ptr<RansTable> parentBlockSymbolTable = std::make_shared<RansTable>(quantizedParentBlockCounts, probabilityRes);
 
     // read parent val block header
     CompressedImageBlockHeader parentValImageHeader = CompressedImageBlockHeader::Read(bytes, parentValImageParents, parentValsWidth, parentValsHeight);

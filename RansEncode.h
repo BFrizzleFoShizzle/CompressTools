@@ -49,12 +49,25 @@ public:
 	uint32_t cumulativeCount;
 };
 
+class CDFTable
+{
+public:
+	CDFTable() {};
+	CDFTable(SymbolCountDict counts, uint32_t probabilityRes);
+
+	RansEntry GetSymbol(uint32_t symbolCDF);
+
+private:
+	std::vector<uint16_t> symbols;
+	std::vector<uint32_t> CDFVals;
+	std::vector<uint32_t> symbolCounts;
+};
 
 class RansTable
 {
 public:
 	RansTable() {};
-	RansTable(SymbolCountDict counts);
+	RansTable(SymbolCountDict counts, uint32_t probabilityRes);
 
 	RansEntry GetSymbolEntry(uint16_t symbol);
 	RansEntry GetSymbolEntryFromFreq(uint32_t prob);
@@ -65,8 +78,17 @@ public:
 private:
 	// TODO do we need both of these?
 	std::unordered_map<uint16_t, RansEntry> symbolTable;
-	std::vector<RansEntry> cdfTable; // used for CDF probability lookups when decoding
+	CDFTable cdfTable; // used for CDF probability lookups when decoding
+	/*
+	std::vector<size_t> binLookupTable; // kind of like a hashmap, used to jump to section of cdfTable based on cdf (for speed)
 
+
+	// CDF > this can be looked up using binLookup
+	// having a pivot ensures high-count symbols don't take up valuable binning space
+	uint32_t binningPivot;
+
+	uint32_t cdfBinDivisor;
+	*/
 };
 
 class RansState
