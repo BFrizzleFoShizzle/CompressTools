@@ -207,50 +207,6 @@ const std::vector<uint16_t> WaveletEncodeLayer::GetWavelets() const
     return wavelets;
 }
 
-std::vector<uint16_t> WaveletEncodeLayer::DecodeLayer() const
-{
-    std::vector<uint16_t> output;
-    output.resize(size.GetWidth() * size.GetHeight());
-
-    auto currWavelet = wavelets.begin();
-
-    // TODO this can be rearranged to run faster
-    for (uint32_t y = 0; y < size.GetHeight(); y += 2)
-    {
-        for (uint32_t x = 0; x < size.GetWidth(); x += 2)
-        {
-            uint32_t parentX = x / 2;
-            uint32_t parentY = y / 2;
-            // get prediction/parent value
-            uint16_t parent = parentVals[parentY * size.GetParentWidth() + parentX];
-            uint16_t predicted = parent;
-
-            // Parent transform is TL, so no wavelet needed
-            output[y * size.GetWidth() + x] = predicted;
-
-            // add wavelet to get final value
-            if (x + 1 < size.GetWidth())
-            {
-                output[y * size.GetWidth() + x + 1] = predicted + *currWavelet;
-                ++currWavelet;
-            }
-
-            if (y + 1 < size.GetHeight())
-            {
-                output[(y + 1) * size.GetWidth() + x] = predicted + *currWavelet;
-                ++currWavelet;
-            }
-
-            if (x + 1 < size.GetWidth() && y + 1 < size.GetHeight())
-            {
-                output[(y + 1) * size.GetWidth() + x + 1] = predicted + *currWavelet;
-                ++currWavelet;
-            }
-        }
-    }
-    return output;
-}
-
 bool WaveletEncodeLayer::IsRoot() const
 {
     return size.IsRoot();
