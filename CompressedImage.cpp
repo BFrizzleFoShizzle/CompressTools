@@ -399,9 +399,8 @@ std::shared_ptr<CompressedImageBlock> CompressedImage::GetBlock(size_t index)
     {
         CompressedImageBlockHeader& header = blockHeaders[index];
 
-        // seek to block body start
-        fileStream.Seek(blockBodiesStart + header.GetBlockPos());
-        ByteIteratorPtr bytes = ByteStreamFromFile(&fileStream);
+        // Create new byte iterator at block body start
+        ByteIteratorPtr bytes = ByteStreamFromFile(&fileStream, blockBodiesStart + header.GetBlockPos());
 
         std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(header, *bytes, globalSymbolTable);
 
