@@ -486,11 +486,44 @@ uint16_t CompressedImage::GetPixel(size_t x, size_t y)
     uint32_t subBlockY = y % header.blockSize;
     size_t blockIdx = blockY * GetWidthInBlocks() + blockX;
 
-    std::shared_ptr<CompressedImageBlock> block = GetBlock(blockIdx);
+    std::shared_ptr<CompressedImageBlock> foundBlock = compressedImageBlocks[blockIdx];
 
-    currentCacheSize -= block->GetMemoryFootprint();
-    uint16_t value = block->GetPixel(subBlockX, subBlockY);
-    currentCacheSize += block->GetMemoryFootprint();
+    // handle nonexistant block
+    if (!foundBlock)
+    {
+        CompressedImageBlockHeader& blockHeader = blockHeaders[blockIdx];
+        uint32_t rootStride = (header.blockSize / 2);
+
+        // If root value is being read, skip block creation
+        if (subBlockX % rootStride == 0
+            && subBlockY % rootStride == 0)
+        {
+            uint32_t rootWidth = blockHeader.getWidth() / rootStride;
+            uint32_t rootX = subBlockX / rootStride;
+            uint32_t rootY = subBlockY / rootStride;
+            // Read directly from root vals
+            return blockHeader.GetParentVals()[rootY * rootWidth + rootX];
+        }
+        // Else, need to create block so it can be decoded
+        else
+        {
+            // Create new byte iterator at block body start
+            ByteIteratorPtr bytes = ByteStreamFromFile(&fileStream, blockBodiesStart + blockHeader.GetBlockPos());
+
+            std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(blockHeader, *bytes, globalSymbolTable);
+
+            compressedImageBlocks[blockIdx] = block;
+
+            // add memory overhead of block
+            currentCacheSize += block->GetMemoryFootprint();
+
+            foundBlock = block;
+        }
+    }
+
+    currentCacheSize -= foundBlock->GetMemoryFootprint();
+    uint16_t value = foundBlock->GetPixel(subBlockX, subBlockY);
+    currentCacheSize += foundBlock->GetMemoryFootprint();
     
     return value;
 }

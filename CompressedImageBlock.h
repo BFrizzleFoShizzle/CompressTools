@@ -24,7 +24,8 @@ public:
     size_t GetBlockPos();
     // returns RAM usage
     size_t GetMemoryFootprint() const;
-    std::vector<uint16_t> GetParentVals();
+    const std::vector<uint16_t> &GetParentVals();
+    uint32_t getWidth();
 private:
     // TODO possibly not needded?
     uint32_t width;

@@ -410,7 +410,12 @@ size_t CompressedImageBlockHeader::GetMemoryFootprint() const
     return sizeof(CompressedImageBlockHeader) + vectorMemoryUsage;
 }
 
-std::vector<uint16_t> CompressedImageBlockHeader::GetParentVals()
+const std::vector<uint16_t>& CompressedImageBlockHeader::GetParentVals()
 {
     return parentVals;
+}
+
+uint32_t CompressedImageBlockHeader::getWidth()
+{
+    return width;
 }

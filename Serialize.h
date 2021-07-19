@@ -154,6 +154,7 @@ typedef std::shared_ptr<ByteIterator> ByteIteratorPtr;
 
 ByteIteratorPtr ByteStreamFromVector(const std::vector<uint8_t>* input);
 ByteIteratorPtr ByteStreamFromFile(FastFileStream* bytes);
+ByteIteratorPtr ByteStreamFromFile(FastFileStream* bytes, size_t position);
 
 template<typename T>
 T ReadValue(ByteIterator &inputBytes)
