@@ -68,6 +68,18 @@ RansEntry CDFTable::GetSymbol(uint32_t symbolCDF)
 RansTable::RansTable(SymbolCountDict counts, uint32_t probabilityRes)
 	: cdfTable(counts, probabilityRes)
 {
+	// TODO symbols get sorted twice (1st time in cdfTable constructor)
+	std::vector<SymbolCount> sortedCounts = EntropySortSymbols(counts);
+
+	// for encoding
+	uint32_t cumulativeCount = 0;
+	for (auto symbolCount : sortedCounts)
+	{
+		RansEntry ransEntry = RansEntry(symbolCount.symbol, symbolCount.count, cumulativeCount);
+		symbolTable.emplace(symbolCount.symbol, ransEntry);
+		cumulativeCount += symbolCount.count;
+	}
+
 	/*
 	uint32_t cumulativeCount = 0;
 	std::vector<SymbolCount> sortedCounts = EntropySortSymbols(counts);
