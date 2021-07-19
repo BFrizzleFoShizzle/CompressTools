@@ -397,7 +397,7 @@ uint16_t RansState::ReadSymbol()
 	newState -= entry.cumulativeCount;
 
 	// feed data into state as needed
-	while (compressedBlocks->size() > 0 && newState < stateMin)
+	while (/*compressedBlocks->size() > 0 && */ newState < stateMin)
 	{
 		newState *= blockSize;
 		newState += compressedBlocks->back();
@@ -426,8 +426,11 @@ uint64_t RansState::GetRansState()
 
 bool RansState::HasData()
 {
+#ifdef DEBUG
+	// this is now slower
 	if (compressedBlocks->size() > 0)
 		return true;
+#endif
 	if (ransState != stateMin)
 		return true;
 	return false;
