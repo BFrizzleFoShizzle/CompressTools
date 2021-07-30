@@ -9,7 +9,7 @@
 
 struct CompressedImageHeader
 {
-    static const uint16_t CURR_VERSION = 0x0002;
+    static const uint16_t CURR_VERSION = 0x0003;
     CompressedImageHeader()
     {
 
@@ -19,6 +19,8 @@ struct CompressedImageHeader
     {}
     bool IsCorrect()
     {
+        if (version != CURR_VERSION)
+            std::cerr << "Old file version not supported: " << version << " expected: " << CURR_VERSION << std::endl;
         return MAGIC == 0xFEDF && version == CURR_VERSION;
     }
     // Header header
