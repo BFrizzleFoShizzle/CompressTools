@@ -5,7 +5,7 @@
 #include <streambuf>
 #include <iostream>
 #include <fstream>
-#include <assert.h>
+#include "Release_Assert.h"
 
 // std::hash is garbage
 size_t HashVec(std::vector<uint16_t> const& vec);

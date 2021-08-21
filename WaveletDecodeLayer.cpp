@@ -1,7 +1,7 @@
 
 #include "WaveletDecodeLayer.h"
 #include <iostream>
-#include <assert.h>
+#include "Release_Assert.h"
 
 WaveletDecodeLayer::WaveletDecodeLayer(const std::vector<uint16_t>& wavelets, const std::vector<uint16_t>& parentVals, uint32_t width, uint32_t height)
     : size(width, height) 

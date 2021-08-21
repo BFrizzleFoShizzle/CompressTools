@@ -95,4 +95,3 @@ __declspec(dllexport) void CompressToolsLib::GetBottomPixels(CompressedImageFile
 	return;
 }
 
-}

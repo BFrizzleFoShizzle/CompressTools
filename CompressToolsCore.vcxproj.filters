@@ -59,5 +59,8 @@
     <ClInclude Include="WaveletLayerCommon.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Release_Assert.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -97,6 +97,7 @@
     <ClInclude Include="CompressedImage.h" />
     <ClInclude Include="CompressedImageBlock.h" />
     <ClInclude Include="RansEncode.h" />
+    <ClInclude Include="Release_Assert.h" />
     <ClInclude Include="Serialize.h" />
     <ClInclude Include="WaveletDecodeLayer.h" />
     <ClInclude Include="WaveletEncodeLayer.h" />

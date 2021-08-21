@@ -3,7 +3,7 @@
 #include "Serialize.h"
 
 #include <iostream>
-#include <assert.h>
+#include "Release_Assert.h"
 
 SymbolCountDict GenerateSymbolCountDictionary(std::vector<uint16_t> symbols)
 {

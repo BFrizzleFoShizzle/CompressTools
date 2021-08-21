@@ -1,6 +1,6 @@
 #include <vector>
 #include <unordered_map>
-#include <assert.h>
+#include "Release_Assert.h"
 #include <iostream>
 #include <algorithm>
 

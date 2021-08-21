@@ -2,7 +2,7 @@
 #include "Serialize.h"
 
 #include <iostream>
-#include <assert.h>
+#include "Release_Assert.h"
 
 // makes serialization easy lmao
 struct CompressedImageBlockHeader::BlockHeaderHeader

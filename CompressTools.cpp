@@ -10,7 +10,7 @@
 #include <vector>
 #include <unordered_map>
 #include <cmath>
-#include <assert.h>
+#include "Release_Assert.h"
 #include <algorithm>
 #include <fstream>
 
