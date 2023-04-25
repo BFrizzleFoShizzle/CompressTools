@@ -10,27 +10,26 @@
 // TODO can we replace this with sorted symbol count vector?
 typedef std::unordered_map<uint16_t, uint32_t> SymbolCountDict;
 
-SymbolCountDict GenerateQuantizedCounts(SymbolCountDict unquantizedCounts, size_t probabilityRange);
+SymbolCountDict GenerateQuantizedPDFs(SymbolCountDict unquantizedCounts, size_t probabilityRange);
 
 // helper struct
-struct SymbolCount
+struct SymbolPDF
 {
-	SymbolCount()
-		: symbol(-1), count(-1)
+	SymbolPDF()
+		: symbol(-1), pdf(-1)
 	{
 	}
-	SymbolCount(uint16_t symbol, uint32_t count)
-		: symbol(symbol), count(count)
+	SymbolPDF(uint16_t symbol, uint32_t pdf)
+		: symbol(symbol), pdf(pdf)
 	{
 
 	}
 
 	uint16_t symbol;
-	uint32_t count;
-
+	uint32_t pdf;
 };
 
-std::vector<SymbolCount> EntropySortSymbols(SymbolCountDict dict);
+std::vector<SymbolPDF> EntropySortSymbols(const SymbolCountDict &dict);
 
 // 16Kx16K shouldn't overflow 32-bit counts
 class RansEntry
@@ -38,29 +37,53 @@ class RansEntry
 public:
 	RansEntry()
 	{};
-	RansEntry(uint16_t symbol, uint32_t count, uint32_t cumulativeCount)
-		: symbol(symbol), count(count), cumulativeCount(cumulativeCount)
+	RansEntry(uint16_t symbol, uint32_t cdf)
+		: symbol(symbol), cdf(cdf)
 	{
 
 	}
 	uint16_t symbol;
 	// used for probabilities
-	uint32_t count;
-	uint32_t cumulativeCount;
+	uint32_t cdf;
+};
+
+// represents a group of symbols with the same count
+class RansGroup
+{
+public:
+	RansGroup()
+	{};
+	RansGroup(uint16_t start, uint16_t count, uint32_t pdf, uint32_t cdf)
+		: start(start), count(count), pdf(pdf), cdf(cdf)
+	{
+
+	}
+	uint16_t start;
+	uint16_t count;
+	// used for probabilities
+	uint32_t pdf;
+	uint32_t cdf;
 };
 
 class CDFTable
 {
 public:
 	CDFTable() {};
-	CDFTable(SymbolCountDict counts, uint32_t probabilityRes);
+	CDFTable(const SymbolCountDict &counts, uint32_t probabilityRes);
 
-	RansEntry GetSymbol(uint32_t symbolCDF);
+	uint16_t GetSymbol(RansGroup group, uint32_t symbolIndex);
+	uint16_t GetSymbolIdxInGroup(RansGroup group, uint16_t symbol);
+	RansGroup GetSymbolGroup(uint32_t symbolCDF);
 
 private:
+	// set to group idx of lowest group with >1 count
+	// 98% of wavelets occur before this, we can use a fast-path for them since group_idx == symbol_idx
+	uint32_t pivot;
 	std::vector<uint16_t> symbols;
-	std::vector<uint32_t> CDFVals;
-	std::vector<uint32_t> symbolCounts;
+	// TODO SIMD?
+	// TODO we could likely drop at least 8 bits off group CDFs with negligible size increase
+	std::vector<uint32_t> groupCDFs;
+	std::vector<uint16_t> groupStarts;
 };
 
 class RansTable
@@ -69,8 +92,10 @@ public:
 	RansTable() {};
 	RansTable(SymbolCountDict counts, uint32_t probabilityRes);
 
-	RansEntry GetSymbolEntry(uint16_t symbol);
-	RansEntry GetSymbolEntryFromFreq(uint32_t prob);
+	inline RansEntry GetSymbolEntry(const uint16_t symbol);
+	inline uint16_t GetSymbolIdxInGroup(const RansGroup group, const uint16_t symbol);
+	inline RansGroup GetSymbolGroupFromFreq(const uint32_t prob);
+	inline uint16_t GetSymbolEntryFromGroup(const RansGroup group, const uint16_t subIndex);
 
 	// Get RAM usage
 	size_t GetMemoryFootprint() const;
@@ -79,16 +104,6 @@ private:
 	// TODO do we need both of these?
 	std::unordered_map<uint16_t, RansEntry> symbolTable;
 	CDFTable cdfTable; // used for CDF probability lookups when decoding
-	/*
-	std::vector<size_t> binLookupTable; // kind of like a hashmap, used to jump to section of cdfTable based on cdf (for speed)
-
-
-	// CDF > this can be looked up using binLookup
-	// having a pivot ensures high-count symbols don't take up valuable binning space
-	uint32_t binningPivot;
-
-	uint32_t cdfBinDivisor;
-	*/
 };
 
 class RansState

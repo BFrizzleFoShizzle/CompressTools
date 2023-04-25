@@ -64,7 +64,7 @@ CompressedImage::CompressedImage(const std::vector<uint16_t>& values, size_t wid
 void WriteSymbolTable(std::vector<uint8_t>& outputBytes, const SymbolCountDict& symbolCounts)
 {
     // Convert to vector so we can sort by entropy, resulting in consistant ordering
-    std::vector<SymbolCount> countsVec = EntropySortSymbols(symbolCounts);
+    std::vector<SymbolPDF> countsVec = EntropySortSymbols(symbolCounts);
 
     // TODO compress this
     WriteVector(outputBytes, countsVec);
@@ -73,12 +73,12 @@ void WriteSymbolTable(std::vector<uint8_t>& outputBytes, const SymbolCountDict& 
 SymbolCountDict ReadSymbolTable(const std::vector<uint8_t>& inputBytes, uint64_t& readPos)
 {
     // Convert to vector so we can sort by entropy, resulting in consistant ordering
-    std::vector<SymbolCount> countsVec = ReadVector<SymbolCount>(inputBytes, readPos);
+    std::vector<SymbolPDF> countsVec = ReadVector<SymbolPDF>(inputBytes, readPos);
 
     // TODO this gets turned back into a count vector later on...
     SymbolCountDict symbolCountDict;
     for (auto symbolCount : countsVec)
-        symbolCountDict.emplace(symbolCount.symbol, symbolCount.count);
+        symbolCountDict.emplace(symbolCount.symbol, symbolCount.pdf);
 
     return std::move(symbolCountDict);
 }
@@ -86,12 +86,12 @@ SymbolCountDict ReadSymbolTable(const std::vector<uint8_t>& inputBytes, uint64_t
 SymbolCountDict ReadSymbolTable(ByteIterator &bytes)
 {
     // Convert to vector so we can sort by entropy, resulting in consistant ordering
-    std::vector<SymbolCount> countsVec = ReadVector<SymbolCount>(bytes);
+    std::vector<SymbolPDF> countsVec = ReadVector<SymbolPDF>(bytes);
 
     // TODO this gets turned back into a count vector later on...
     SymbolCountDict symbolCountDict;
     for (auto symbolCount : countsVec)
-        symbolCountDict.emplace(symbolCount.symbol, symbolCount.count);
+        symbolCountDict.emplace(symbolCount.symbol, symbolCount.pdf);
 
     return std::move(symbolCountDict);
 }
@@ -111,8 +111,8 @@ std::vector<uint8_t> CompressedImage::Serialize()
     // generate rANS symbol table (currently costly)
     size_t probabilityRes = 24;
     size_t probabilityRange = 1 << probabilityRes;
-    SymbolCountDict quantizedCounts = GenerateQuantizedCounts(globalSymbolCounts, probabilityRange);
-    globalSymbolTable = std::make_shared<RansTable>(quantizedCounts, probabilityRes);
+    SymbolCountDict quantizedPDFs = GenerateQuantizedPDFs(globalSymbolCounts, probabilityRange);
+    globalSymbolTable = std::make_shared<RansTable>(quantizedPDFs, probabilityRes);
 
     // Generate wavelet image for parent vals
    // parent block parents, wavelet counts, header, body
@@ -163,8 +163,8 @@ std::vector<uint8_t> CompressedImage::Serialize()
     std::cout << "Writing parent vals symbol table..." << std::endl;
     WriteSymbolTable(byteStream, parentValsWaveletSymbolCounts);
     // generate rANS symbol table (currently costly)
-    SymbolCountDict parentQuantizedCounts = GenerateQuantizedCounts(parentValsWaveletSymbolCounts, probabilityRange);
-    std::shared_ptr<RansTable> parentSymbolTable = std::make_shared<RansTable>(parentQuantizedCounts, probabilityRes);
+    SymbolCountDict parentQuantizedPDFs = GenerateQuantizedPDFs(parentValsWaveletSymbolCounts, probabilityRange);
+    std::shared_ptr<RansTable> parentSymbolTable = std::make_shared<RansTable>(parentQuantizedPDFs, probabilityRes);
 
     // Prepare parent val block body + fill in header
     std::vector<uint8_t> parentValsBodyBytes;
@@ -244,16 +244,16 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     // generate rANS symbol table (currently costly)
     size_t probabilityRes = 24;
     size_t probabilityRange = 1 << probabilityRes;
-    SymbolCountDict quantizedCounts = GenerateQuantizedCounts(waveletSymbolCounts, probabilityRange);
-    std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedCounts, probabilityRes);
+    SymbolCountDict quantizedPDFs = GenerateQuantizedPDFs(waveletSymbolCounts, probabilityRange);
+    std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(quantizedPDFs, probabilityRes);
     // read parent val block parents
     // TODO we could stream this
     std::vector<uint16_t> parentValImageParents = ReadVector<uint16_t>(bytes);
 
     // read parent val block wavelet counts
     SymbolCountDict parentValImageWaveletCounts = ReadSymbolTable(bytes);
-    SymbolCountDict quantizedParentBlockCounts = GenerateQuantizedCounts(parentValImageWaveletCounts, probabilityRange);
-    std::shared_ptr<RansTable> parentBlockSymbolTable = std::make_shared<RansTable>(quantizedParentBlockCounts, probabilityRes);
+    SymbolCountDict quantizedParentBlockPDFs = GenerateQuantizedPDFs(parentValImageWaveletCounts, probabilityRange);
+    std::shared_ptr<RansTable> parentBlockSymbolTable = std::make_shared<RansTable>(quantizedParentBlockPDFs, probabilityRes);
 
     // read parent val block header
     CompressedImageBlockHeader parentValImageHeader = CompressedImageBlockHeader::Read(bytes, parentValImageParents, parentValsWidth, parentValsHeight);
