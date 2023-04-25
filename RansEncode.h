@@ -10,8 +10,6 @@
 // TODO can we replace this with sorted symbol count vector?
 typedef std::unordered_map<uint16_t, uint32_t> SymbolCountDict;
 
-SymbolCountDict GenerateQuantizedPDFs(SymbolCountDict unquantizedCounts, size_t probabilityRange);
-
 // helper struct
 struct SymbolPDF
 {
@@ -90,7 +88,7 @@ class RansTable
 {
 public:
 	RansTable() {};
-	RansTable(SymbolCountDict counts, uint32_t probabilityRes);
+	RansTable(SymbolCountDict unquantizedCounts, uint32_t probabilityRes);
 
 	inline RansEntry GetSymbolEntry(const uint16_t symbol);
 	inline uint16_t GetSymbolIdxInGroup(const RansGroup group, const uint16_t symbol);

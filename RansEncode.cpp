@@ -121,77 +121,10 @@ uint16_t CDFTable::GetSymbolIdxInGroup(RansGroup group, uint16_t symbol)
 	return -1;
 }
 
-RansTable::RansTable(SymbolCountDict PDFs, uint32_t probabilityRes)
+SymbolCountDict GenerateQuantizedPDFs(SymbolCountDict unquantizedCounts, size_t probabilityRes)
 {
-	// TODO symbols get sorted twice (1st time in cdfTable constructor)
-	std::vector<SymbolPDF> sortedPDFs = EntropySortSymbols(PDFs);
-	cdfTable = CDFTable(PDFs, probabilityRes);
+	size_t probabilityRange = 1 << probabilityRes;
 
-	// for encoding
-	uint32_t currCDF = 0;
-	for (auto symbolPDF : sortedPDFs)
-	{
-		RansEntry ransEntry = RansEntry(symbolPDF.symbol, currCDF);
-		symbolTable.emplace(symbolPDF.symbol, ransEntry);
-		currCDF += symbolPDF.pdf;
-	}
-	// debug code
-	/*
-	for (auto symbolPDF : symbolTable)
-	{
-		RansGroup group = cdfTable.GetSymbolGroup(symbolPDF.second.cdf);
-		// fast path
-		uint16_t entry = group.count;
-		// slow path
-		if (group.start != 0)
-		{
-			uint32_t idx = cdfTable.GetSymbolIdxInGroup(group, symbolPDF.first);
-			entry = cdfTable.GetSymbol(group, idx);
-		}
-		if (entry != symbolPDF.second.symbol)
-		{
-
-			std::cout << "cdfTable test fail " << symbolPDF.first << " " << symbolPDF.second.cdf << " " << std::endl;
-			assert(false);
-			break;
-		}
-	}
-	*/
-}
-
-RansEntry RansTable::GetSymbolEntry(uint16_t symbol)
-{
-	return symbolTable[symbol];
-}
-
-uint16_t RansTable::GetSymbolIdxInGroup(const RansGroup group, const uint16_t symbol)
-{
-	return cdfTable.GetSymbolIdxInGroup(group, symbol);
-}
-
-// Cumulative probability to rANS group
-RansGroup RansTable::GetSymbolGroupFromFreq(const uint32_t prob)
-{
-	return cdfTable.GetSymbolGroup(prob);
-}
-
-uint16_t RansTable::GetSymbolEntryFromGroup(const RansGroup group, const uint16_t subIndex)
-{
-	return cdfTable.GetSymbol(group, subIndex);
-}
-
-size_t RansTable::GetMemoryFootprint() const
-{
-	// this isn't that accurate
-	size_t mapSize = std::max(symbolTable.bucket_count(), symbolTable.size()) * sizeof(std::unordered_map< uint16_t, RansEntry>::value_type);
-	// TODO UPDATE
-	size_t vectorSize = 0;// cdfTable.capacity() * sizeof(RansEntry);
-
-	return sizeof(RansTable) + mapSize + vectorSize;
-}
-
-SymbolCountDict GenerateQuantizedPDFs(SymbolCountDict unquantizedCounts, size_t probabilityRange)
-{
 	uint64_t countsSum = 0;
 	for (const auto symbolCount : unquantizedCounts)
 	{
@@ -204,8 +137,6 @@ SymbolCountDict GenerateQuantizedPDFs(SymbolCountDict unquantizedCounts, size_t 
 
 	// TODO move elsewhere?
 	std::vector<SymbolPDF> sortedSymbolCounts = EntropySortSymbols(unquantizedCounts);
-	//std::cout << "Counting symbols..." << std::endl;
-	// Step 1: convert to quantized probabilities
 
 	//std::cout << "Generating quantized symbols..." << std::endl;
 	uint64_t quantizedPDFsSum = 0;
@@ -286,6 +217,78 @@ SymbolCountDict GenerateQuantizedPDFs(SymbolCountDict unquantizedCounts, size_t 
 	}
 
 	return quantizedPDFs;
+}
+
+
+RansTable::RansTable(SymbolCountDict unquantizedCounts, uint32_t probabilityRes)
+{
+	SymbolCountDict PDFs = GenerateQuantizedPDFs(unquantizedCounts, probabilityRes);
+
+	// TODO symbols get sorted twice (1st time in cdfTable constructor)
+	std::vector<SymbolPDF> sortedPDFs = EntropySortSymbols(PDFs);
+	cdfTable = CDFTable(PDFs, probabilityRes);
+
+	// for encoding
+	uint32_t currCDF = 0;
+	for (auto symbolPDF : sortedPDFs)
+	{
+		RansEntry ransEntry = RansEntry(symbolPDF.symbol, currCDF);
+		symbolTable.emplace(symbolPDF.symbol, ransEntry);
+		currCDF += symbolPDF.pdf;
+	}
+	// debug code
+	/*
+	for (auto symbolPDF : symbolTable)
+	{
+		RansGroup group = cdfTable.GetSymbolGroup(symbolPDF.second.cdf);
+		// fast path
+		uint16_t entry = group.count;
+		// slow path
+		if (group.start != 0)
+		{
+			uint32_t idx = cdfTable.GetSymbolIdxInGroup(group, symbolPDF.first);
+			entry = cdfTable.GetSymbol(group, idx);
+		}
+		if (entry != symbolPDF.second.symbol)
+		{
+
+			std::cout << "cdfTable test fail " << symbolPDF.first << " " << symbolPDF.second.cdf << " " << std::endl;
+			assert(false);
+			break;
+		}
+	}
+	*/
+}
+
+RansEntry RansTable::GetSymbolEntry(uint16_t symbol)
+{
+	return symbolTable[symbol];
+}
+
+uint16_t RansTable::GetSymbolIdxInGroup(const RansGroup group, const uint16_t symbol)
+{
+	return cdfTable.GetSymbolIdxInGroup(group, symbol);
+}
+
+// Cumulative probability to rANS group
+RansGroup RansTable::GetSymbolGroupFromFreq(const uint32_t prob)
+{
+	return cdfTable.GetSymbolGroup(prob);
+}
+
+uint16_t RansTable::GetSymbolEntryFromGroup(const RansGroup group, const uint16_t subIndex)
+{
+	return cdfTable.GetSymbol(group, subIndex);
+}
+
+size_t RansTable::GetMemoryFootprint() const
+{
+	// this isn't that accurate
+	size_t mapSize = std::max(symbolTable.bucket_count(), symbolTable.size()) * sizeof(std::unordered_map< uint16_t, RansEntry>::value_type);
+	// TODO UPDATE
+	size_t vectorSize = 0;// cdfTable.capacity() * sizeof(RansEntry);
+
+	return sizeof(RansTable) + mapSize + vectorSize;
 }
 
 RansState::RansState()
