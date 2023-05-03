@@ -128,13 +128,13 @@ class RansState
 public:
 	RansState();
 	// rANS state - size of state = size of probability + size of output block
-	RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
+	RansState(uint32_t probabilityRes, SymbolCountDict counts);
 	// fast constructor if rANS table is already generated
-	RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize);
+	RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable);
 	// TODO serialize whole thing?
-	RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize);
+	RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, SymbolCountDict counts);
 	// fast constructor if rANS table is already generated
-	RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize);
+	RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable);
 
 	// Encode symbol
 	void AddSymbol(symbol_t symbol);
@@ -154,7 +154,6 @@ private:
 	void AddGroup(RansGroup group);
 	void AddSubIdx(symbol_t symbol, RansGroup group);
 	count_t probabilityRange;
-	uint32_t blockSize;
 	state_t stateMin;
 	state_t stateMax;
 	state_t ransState;

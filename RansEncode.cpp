@@ -5,11 +5,10 @@
 
 #include "RansEncode.h"
 
-const uint32_t COMPRESSED_LOOKUP_BINS = 4096;
-const uint32_t ROOT_BIN_SIZE = 3;
 // Ported from my old Python implementation
 
 constexpr uint16_t PIVOT_INVALID = 0xFFFF;
+constexpr uint32_t BLOCK_SIZE = 1 << (8 * sizeof(block_t));
 
 // helper for deterministic entropy sorting
 bool EntropyLess(const SymbolPDF& count1, const SymbolPDF& count2)
@@ -581,61 +580,55 @@ size_t RansTable::GetMemoryFootprint() const
 }
 
 RansState::RansState()
-	: probabilityRange(0), blockSize(0), stateMax(0), stateMin(0), ransState(0)
+	: probabilityRange(0), stateMax(0), stateMin(0), ransState(0)
 {
 
 }
 
 // rANS state - size of state = size of probability + size of output block
-RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
+RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts)
 	: ransTable()
 {
 	compressedBlocks = std::shared_ptr<VectorStream<block_t>>(new VectorVectorStream<block_t>());
 
 	// Initialize rANS encoding parameters
 	probabilityRange = 1 << probabilityRes;
-	blockSize = 1 << outputBlockSize;
 	stateMin = probabilityRange;
-	stateMax = (stateMin * blockSize) - 1;
+	stateMax = (stateMin * BLOCK_SIZE) - 1;
 	
 	ransTable = std::make_shared<RansTable>(counts, probabilityRes);
 	// You can technically set initial rANS state to anything, but I choose the min. val
 	ransState = stateMin;
-	//ransState2 = stateMin;
 }
 
 // fast constructor
-RansState::RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
+RansState::RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable)
 {
 	compressedBlocks = std::shared_ptr<VectorStream<block_t>>(new VectorVectorStream<block_t>());
 
 	// Initialize rANS encoding parameters
 	probabilityRange = 1 << probabilityRes;
-	blockSize = 1 << outputBlockSize;
 	stateMin = probabilityRange;
-	stateMax = (stateMin * blockSize) - 1;
+	stateMax = (stateMin * BLOCK_SIZE) - 1;
 
 	ransTable = symbolTable;
 	// You can technically set initial rANS state to anything, but I choose the min. val
 	ransState = stateMin;
-	//ransState2 = stateMin;
 }
 
 // initialize for decoding
-RansState::RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
-	: RansState(probabilityRes, counts, outputBlockSize)
+RansState::RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, SymbolCountDict counts)
+	: RansState(probabilityRes, counts)
 {
 	this->compressedBlocks = compressedBlocks;
 	this->ransState = ransState;
-	//this->ransState2 = ransState >> 32;
 }
 
-RansState::RansState(std::shared_ptr<VectorStream<block_t>>  compressedBlocks, state_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
-	: RansState(probabilityRes, symbolTable, outputBlockSize)
+RansState::RansState(std::shared_ptr<VectorStream<block_t>>  compressedBlocks, state_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable)
+	: RansState(probabilityRes, symbolTable)
 {
 	this->compressedBlocks = compressedBlocks;
 	this->ransState = ransState;
-	//this->ransState2 = ransState >> 32;
 }
 
 
@@ -643,10 +636,10 @@ void RansState::AddGroup(RansGroup group)
 {
 	//std::cout << "State1: " << ransState << std::endl;
 	/*
-	while (ransState >= blockSize * group.pdf)
+	while (ransState >= BLOCK_SIZE * group.pdf)
 	{
-		compressedBlocks->push_back(ransState % blockSize);
-		ransState /= blockSize;
+		compressedBlocks->push_back(ransState % BLOCK_SIZE);
+		ransState /= BLOCK_SIZE;
 	}
 
 	std::cout << "State2: " << ransState << std::endl;
@@ -666,9 +659,9 @@ void RansState::AddGroup(RansGroup group)
 	int count = 0;
 	while (newState > stateMax)
 	{
-		compressedBlocks->push_back(ransState % blockSize);
+		compressedBlocks->push_back(ransState % BLOCK_SIZE);
 		//std::cout << "push " << int(compressedBlocks->back()) << std::endl;
-		ransState /= blockSize;
+		ransState /= BLOCK_SIZE;
 		newState = ransState / group.pdf;
 		newState *= probabilityRange;
 		newState += group.cdf;
@@ -687,9 +680,9 @@ void RansState::AddGroup(RansGroup group)
 	// renormalize if necessary
 	if (newState > stateMax)
 	{
-		compressedBlocks->push_back(ransState % blockSize);
+		compressedBlocks->push_back(ransState % BLOCK_SIZE);
 		std::cout << "push " << int(compressedBlocks->back()) << std::endl;
-		ransState /= blockSize;
+		ransState /= BLOCK_SIZE;
 		AddGroup(group);
 		return;
 	}
@@ -699,8 +692,8 @@ void RansState::AddGroup(RansGroup group)
 	// renormalize if necessary
 	while (newState > stateMax)
 	{
-		compressedBlocks->push_back(ransState % blockSize);
-		ransState /= blockSize;
+		compressedBlocks->push_back(ransState % BLOCK_SIZE);
+		ransState /= BLOCK_SIZE;
 		newState = ransState / group.pdf;
 		newState *= probabilityRange;
 		newState += group.cdf;
@@ -738,21 +731,21 @@ void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
 	int count = 0;
 
 	// TODO FIX THIS
-	//while (ransState2 >= blockSize * (stateMin / probabilityRange))
+	//while (ransState2 >= BLOCK_SIZE * (stateMin / probabilityRange))
 	/*
 	while ((ransState2 * group.count) + symbolIdx > stateMax
 		// TODO dumb hack to work around rounding issues
-		&& ((ransState2 / blockSize) * group.count) + symbolIdx >= stateMin)
+		&& ((ransState2 / BLOCK_SIZE) * group.count) + symbolIdx >= stateMin)
 		*/
 	// if adding this value stops underflow from triggering, we need to trigger underflow
-	//while (((ransState2 * group.count) + symbolIdx) / blockSize >= stateMin)
+	//while (((ransState2 * group.count) + symbolIdx) / BLOCK_SIZE >= stateMin)
 	// floating min
 	/*
-	while ((ransState2 * group.count) + symbolIdx > (blockSize * group.count) - 1)
+	while ((ransState2 * group.count) + symbolIdx > (BLOCK_SIZE * group.count) - 1)
 	{
 		std::cout << "Renorm " << ((ransState2 * group.count) + symbolIdx) << std::endl;
-		compressedBlocks->push_back(ransState2 % blockSize);
-		ransState2 /= blockSize;
+		compressedBlocks->push_back(ransState2 % BLOCK_SIZE);
+		ransState2 /= BLOCK_SIZE;
 		++count;
 		if (count > 100)
 		{
@@ -781,9 +774,9 @@ void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
 	// push the bytes the decoder will need to read after decoding our value
 	while (newState > stateMax)
 	{
-		compressedBlocks->push_back(ransState % blockSize);
+		compressedBlocks->push_back(ransState % BLOCK_SIZE);
 		//std::cout << "push " << int(compressedBlocks->back()) << std::endl;
-		ransState /= blockSize;
+		ransState /= BLOCK_SIZE;
 		newState = ransState / pdf;
 		newState *= probabilityRange;
 		newState += cdf;
@@ -802,9 +795,9 @@ void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
 	// renormalize if necessary
 	if (newState > stateMax)
 	{
-		compressedBlocks->push_back(ransState2 % blockSize);
+		compressedBlocks->push_back(ransState2 % BLOCK_SIZE);
 		std::cout << "push " << int(compressedBlocks->back()) << std::endl;
-		ransState2 /= blockSize;
+		ransState2 /= BLOCK_SIZE;
 		AddSubIdx(symbol, group);
 		return;
 	}
@@ -852,8 +845,8 @@ void RansState::AddSymbol(symbol_t symbol)
 		// renormalize if necessary
 		while (newState > stateMax)
 		{
-			compressedBlocks->push_back(ransState % blockSize);
-			ransState /= blockSize;
+			compressedBlocks->push_back(ransState % BLOCK_SIZE);
+			ransState /= BLOCK_SIZE;
 			newState = ransState * group.count;
 			newState += symbolIdx;
 		}
@@ -878,8 +871,8 @@ void RansState::AddSymbol(symbol_t symbol)
 	// renormalize if necessary
 	while (newState > stateMax)
 	{
-		compressedBlocks->push_back(ransState % blockSize);
-		ransState /= blockSize;
+		compressedBlocks->push_back(ransState % BLOCK_SIZE);
+		ransState /= BLOCK_SIZE;
 		newState = ransState / group.pdf;
 		newState *= probabilityRange;
 		newState += group.cdf;
@@ -915,7 +908,7 @@ symbol_t RansState::ReadSymbol()
 	while (ransState < stateMin)
 	{
 		//std::cout << "pop " << int(compressedBlocks->back()) << std::endl;
-		ransState *= blockSize;
+		ransState *= BLOCK_SIZE;
 		ransState += compressedBlocks->back();
 		compressedBlocks->pop_back();
 	}
@@ -951,7 +944,7 @@ symbol_t RansState::ReadSymbol()
 	while (ransState2 < group.count)
 	{
 		std::cout << "pop " << int(compressedBlocks->back()) << std::endl;
-		ransState2 *= blockSize;
+		ransState2 *= BLOCK_SIZE;
 		ransState2 += compressedBlocks->back();
 		compressedBlocks->pop_back();
 	}
@@ -978,7 +971,7 @@ symbol_t RansState::ReadSymbol()
 	while (ransState < stateMin)
 	{
 		//std::cout << "pop " << int(compressedBlocks->back()) << std::endl;
-		ransState *= blockSize;
+		ransState *= BLOCK_SIZE;
 		ransState += compressedBlocks->back();
 		compressedBlocks->pop_back();
 	}
@@ -1021,7 +1014,7 @@ bool RansState::IsValid()
 	valid = valid && (stateMin <= ransState || compressedBlocks->size() > 0) && stateMax >= ransState;
 
 	// check rANS state is large enough
-	valid = valid && std::numeric_limits<uint64_t>::max() / probabilityRange > blockSize;
+	valid = valid && std::numeric_limits<uint64_t>::max() / probabilityRange > BLOCK_SIZE;
 
 	// TODO table checks?
 

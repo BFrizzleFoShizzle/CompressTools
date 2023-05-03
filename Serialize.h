@@ -55,7 +55,7 @@ public:
     virtual void operator-=(size_t count) = 0;
     // clone stream at position
     virtual std::shared_ptr<Stream<T>> clone() = 0;
-    virtual Stream<symbol_t>* castToBlocks() = 0;
+    virtual Stream<block_t>* castToBlocks() = 0;
 };
 
 template<typename T>
@@ -98,9 +98,9 @@ public:
         return std::shared_ptr<Stream<T>>(new VectorIOStream<T>(input, position));
     }
     // clone stream at position
-    Stream<symbol_t>* castToBlocks()
+    Stream<block_t>* castToBlocks()
     {
-        return new VectorIOStream<symbol_t>(input, position);
+        return new VectorIOStream<block_t>(input, position);
     }
 private:
     const std::vector<uint8_t>* input;
@@ -150,9 +150,9 @@ public:
         return std::shared_ptr<Stream<T>>(new FileIOStream<T>(bytes, position));
     }
     // clone stream at position
-    Stream<symbol_t>* castToBlocks()
+    Stream<block_t>* castToBlocks()
     {
-        return new FileIOStream<symbol_t>(bytes, position);
+        return new FileIOStream<block_t>(bytes, position);
     }
 private:
     FastFileStream* bytes;
@@ -445,6 +445,16 @@ std::shared_ptr<VectorStream<T>> StreamVector(Iterator<T>& bytes)
     bytes += vectorHeader.count * sizeof(T);
 
     return out;
+}
+
+template<typename T, typename BT>
+void SkipVector(Iterator<BT>& bytes)
+{
+    // read header
+    VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(bytes);
+
+    // seek to end of stream
+    bytes += vectorHeader.count * sizeof(T);
 }
 
 // WARNING: if consumeImmediate = true, does NO READS and DOES NOT move ptr forward!

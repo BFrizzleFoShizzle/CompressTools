@@ -43,7 +43,7 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, It
     }
 
     //std::cout << rANSBytes.size() << " Bytes read" << std::endl;
-    ransState = RansState(ransByteStream, header.finalRansState, PROBABILITY_RES, symbolTable, BLOCK_SIZE);
+    ransState = RansState(ransByteStream, header.finalRansState, PROBABILITY_RES, symbolTable);
 }
 
 uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
@@ -193,7 +193,7 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
     // TODO error-checking
     size_t waveletsHash = HashVec(blockWavelets);
     // rANS encode - 16-bit probability, 16-bit blocks
-    std::shared_ptr<RansState> waveletRansState = std::make_shared<RansState>(PROBABILITY_RES, globalSymbolTable, BLOCK_SIZE);
+    std::shared_ptr<RansState> waveletRansState = std::make_shared<RansState>(PROBABILITY_RES, globalSymbolTable);
     // rANS decodes backwards
     std::reverse(blockWavelets.begin(), blockWavelets.end());
 
@@ -203,8 +203,8 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
 
     size_t finalRansState = waveletRansState->GetRansState();
 
-    //if (finalRansState > std::numeric_limits<uint32_t>::max())
-    //    std::cerr << "Final rANS state is above max!" << std::endl;
+    if (finalRansState > std::numeric_limits<uint32_t>::max())
+        std::cerr << "Final rANS state is above max!" << std::endl;
 
     header.finalRansState = waveletRansState->GetRansState();
     //std::cout << "finsihed rANS encode..." << std::endl;

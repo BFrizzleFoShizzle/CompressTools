@@ -161,7 +161,7 @@ std::vector<uint8_t> CompressedImage::Serialize()
     parentsBlockHeader.Write(byteStream);
 
     // write out body bytes
-    WriteVector(byteStream, parentValsBodyBytes);
+    byteStream.insert(byteStream.end(), parentValsBodyBytes.begin(), parentValsBodyBytes.end());
 
     std::cout << "Parent block size:" << (byteStream.size() - parentImageStart) << std::endl;
 
@@ -240,9 +240,9 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     CompressedImageBlockHeader parentValImageHeader = CompressedImageBlockHeader::Read(bytes, parentValImageParents, parentValsWidth, parentValsHeight);
 
     // read parent val image
-    IteratorPtr<block_t> bodyStream = ReverseStreamVector(*bytes.castToBlocks(), true)->get_stream();
+    IteratorPtr<block_t> bodyStream = IteratorPtr<block_t>(bytes.castToBlocks());
     // TODO this is dumb - move bytes by same amount
-    StreamVector(bytes);
+    SkipVector<block_t>(bytes);
 
     std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(parentValImageHeader, *bodyStream, parentBlockSymbolTable);
 
@@ -338,9 +338,7 @@ std::shared_ptr<CompressedImage> CompressedImage::Deserialize(ByteIterator &byte
             lastBlockStart = blockHeader->GetBlockPos();
 
             // read parent val image
-            IteratorPtr<block_t> bodyStream = ReverseStreamVector(*bytes.castToBlocks(), true)->get_stream();
-            // TODO this is dumb - move bytes by same amount
-            StreamVector(bytes);
+            IteratorPtr<block_t> bodyStream = IteratorPtr<block_t>(bytes.castToBlocks());
 
             std::shared_ptr <CompressedImageBlock> block = std::make_shared<CompressedImageBlock>(*blockHeader, *bodyStream, image->globalSymbolTable);
             if (blockX == 50 && blockY == 50)
