@@ -52,7 +52,6 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 		assert(false);
 	}
 
-	// TODO move elsewhere?
 	std::vector<SymbolPDF> sortedSymbolCounts = EntropySortSymbols(unquantizedCounts);
 
 	// Step 1: group equal counts
@@ -192,7 +191,6 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 			if (quantizedPDF.second == 1)
 				continue;
 			// Entropy cost of reducing probability
-			// (TODO This can probably be simplified to something cheap, but D-Day is in 2 days...)
 			double oldProbability = quantizedPDF.second;
 			oldProbability /= quantizedGroupPDFsSum;
 			double oldEntropy = symbolCount * -log2(oldProbability);

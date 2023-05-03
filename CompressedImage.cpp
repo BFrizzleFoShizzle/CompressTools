@@ -22,7 +22,6 @@ CompressedImage::CompressedImage(const std::vector<symbol_t>& values, size_t wid
     header.blockSize = blockSize;
 
     // generate blocks
-    // TODO morton order?
     std::vector<symbol_t> waveletValues;
     std::cout << "Generating image blocks..." << std::endl;
     for (size_t blockStartY = 0; blockStartY < height; blockStartY += blockSize)
@@ -97,7 +96,6 @@ std::vector<uint8_t> CompressedImage::Serialize()
 
     // write symbol table
     std::cout << "Writing symbol table..." << std::endl;
-    // TODO why don't we write out quantized symbol counts???
     WriteSymbolTable(byteStream, globalSymbolTable->GenerateGroupCDFs());
 
     // Generate wavelet image for parent vals
@@ -229,7 +227,6 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     std::shared_ptr<RansTable> globalSymbolTable = std::make_shared<RansTable>(waveletSymbolGroups, PROBABILITY_RES);
 
     // read parent val block parents
-    // TODO we could stream this
     std::vector<symbol_t> parentValImageParents = ReadVector<symbol_t>(bytes);
 
     // read parent val block wavelet counts

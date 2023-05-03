@@ -7,9 +7,7 @@
 
 // Ported from my old Python implementation
 
-// TODO can we replace this with sorted symbol count vector?
 typedef std::unordered_map<symbol_t, count_t> SymbolCountDict;
-
 
 // helper struct
 struct SymbolPDF
@@ -18,6 +16,7 @@ struct SymbolPDF
 		: symbol(-1), pdf(-1)
 	{
 	}
+
 	SymbolPDF(symbol_t symbol, count_t pdf)
 		: symbol(symbol), pdf(pdf)
 	{

@@ -69,7 +69,6 @@ private:
     uint32_t DecodeToLevel(uint32_t targetLevel);
 
     CompressedImageBlockHeader header;
-    // TODO remove this and stream in data
     RansState ransState;
     std::shared_ptr<WaveletEncodeLayer> encodeWaveletPyramidBottom;
     std::shared_ptr<WaveletDecodeLayer> currDecodeLayer;
