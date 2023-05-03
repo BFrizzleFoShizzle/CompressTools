@@ -203,8 +203,8 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
 
     size_t finalRansState = waveletRansState->GetRansState();
 
-    if (finalRansState > std::numeric_limits<uint32_t>::max())
-        std::cerr << "Final rANS state is above max!" << std::endl;
+    //if (finalRansState > std::numeric_limits<uint32_t>::max())
+    //    std::cerr << "Final rANS state is above max!" << std::endl;
 
     header.finalRansState = waveletRansState->GetRansState();
     //std::cout << "finsihed rANS encode..." << std::endl;

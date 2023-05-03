@@ -76,9 +76,9 @@ public:
 	// decoding
 	CDFTable(const TableGroupList& groupList, uint32_t probabilityRes);
 
-	symbol_t GetSymbol(RansGroup group, symidx_t symbolIndex);
+	inline symbol_t GetSymbol(RansGroup group, symidx_t symbolIndex);
 	symidx_t GetSymbolSubIdx(RansGroup group, symbol_t symbol);
-	RansGroup GetSymbolGroup(prob_t symbolCDF);
+	inline void GetSymbolGroup(prob_t symbolCDF, RansGroup& out);
 	// used for writing to disk
 	// [group](PDF, symbols[])
 	TableGroupList GenerateGroupCDFs();
@@ -88,6 +88,10 @@ private:
 	// 98% of wavelets occur before this, we can use a fast-path for them since group_idx == symbol_idx
 	group_t pivotIdx;
 	prob_t pivotCDF;
+	// start CDF of "raw" values that are stored uncompressed
+	// 95% of symbol entries are handled by this, which keeps symbols[] small
+	//use of rawCDF increases file size by up to 1% but increases decode speed of both raw and non-raw symbols
+	prob_t rawCDF;
 	std::vector<symbol_t> symbols;
 	// TODO SIMD?
 	std::vector<prob_t> groupCDFs;
@@ -106,7 +110,7 @@ public:
 
 	inline RansGroup GetSymbolGroup(const symbol_t symbol);
 	inline symidx_t GetSymbolSubIdx(const symbol_t symbol);
-	inline RansGroup GetSymbolGroupFromFreq(const prob_t prob);
+	inline void GetSymbolGroupFromFreq(const prob_t prob, RansGroup& out);
 	inline symbol_t GetSymbolFromGroup(const RansGroup group, const symidx_t subIndex);
 
 	// used for writing to disk
