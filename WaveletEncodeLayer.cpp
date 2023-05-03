@@ -1,7 +1,6 @@
 
 #include "WaveletEncodeLayer.h"
 
-#include <iostream>
 #include "Release_Assert.h"
 
 WaveletEncodeLayer::WaveletEncodeLayer(std::vector<uint16_t> values, uint32_t width, uint32_t height)
@@ -197,12 +196,12 @@ std::shared_ptr<WaveletEncodeLayer> WaveletEncodeLayer::GetParentLayer() const
     return parent;
 }
 
-const std::vector<uint16_t> WaveletEncodeLayer::GetParentVals() const
+const std::vector<symbol_t> WaveletEncodeLayer::GetParentVals() const
 {
     return parentVals;
 }
 
-const std::vector<uint16_t> WaveletEncodeLayer::GetWavelets() const
+const std::vector<symbol_t> WaveletEncodeLayer::GetWavelets() const
 {
     return wavelets;
 }

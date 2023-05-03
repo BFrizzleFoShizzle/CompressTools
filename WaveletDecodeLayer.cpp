@@ -1,9 +1,8 @@
 
 #include "WaveletDecodeLayer.h"
-#include <iostream>
 #include "Release_Assert.h"
 
-WaveletDecodeLayer::WaveletDecodeLayer(const std::vector<uint16_t>& wavelets, const std::vector<uint16_t>& parentVals, uint32_t width, uint32_t height)
+WaveletDecodeLayer::WaveletDecodeLayer(const std::vector<symbol_t>& wavelets, const std::vector<symbol_t>& parentVals, uint32_t width, uint32_t height)
     : size(width, height) 
 {
     pixelVals.resize(size.GetWidth() * size.GetHeight());
@@ -36,7 +35,7 @@ WaveletDecodeLayer::WaveletDecodeLayer(const std::vector<uint16_t>& wavelets, co
             int32_t parentY = y / 2;
 
             // Top left is guaranteed
-            uint16_t TL = parentVals[parentY * size.GetParentWidth() + parentX];
+            symbol_t TL = parentVals[parentY * size.GetParentWidth() + parentX];
 
             // Parent transform is TL, so no wavelet needed
             pixelVals[y * size.GetWidth() + x] = TL;
@@ -83,7 +82,7 @@ WaveletDecodeLayer::WaveletDecodeLayer(const std::vector<uint16_t>& wavelets, co
                 predicted = predicted / predictionCount;
 
                 // add wavelet to get final value
-                uint16_t outputVal = predicted + *currWavelet;
+                symbol_t outputVal = predicted + *currWavelet;
                 pixelVals[(y + 1) * size.GetWidth() + x + 1] = outputVal;
                 ++currWavelet;
 
@@ -160,19 +159,19 @@ WaveletDecodeLayer::WaveletDecodeLayer(const std::vector<uint16_t>& wavelets, co
 }
 
 
-std::vector<uint16_t> WaveletDecodeLayer::GetPixels() const
+std::vector<symbol_t> WaveletDecodeLayer::GetPixels() const
 {
     return pixelVals;
 }
 
 // does inverse parent transform to get parent values
-std::vector<uint16_t> WaveletDecodeLayer::GetParentLevelPixels(uint32_t level) const
+std::vector<symbol_t> WaveletDecodeLayer::GetParentLevelPixels(uint32_t level) const
 {
     WaveletLayerSize targetSize = size;
     for (int i = 0; i < level; ++i)
         targetSize = targetSize.GetParentSize();
 
-    std::vector<uint16_t> parentVals;
+    std::vector<symbol_t> parentVals;
     parentVals.resize(targetSize.GetPixelCount());
     size_t shift = 1 << level;
     for (uint32_t y = 0; y < targetSize.GetHeight(); ++y)
@@ -198,7 +197,7 @@ uint32_t WaveletDecodeLayer::GetHeight() const
     return size.GetHeight();
 }
 
-uint16_t WaveletDecodeLayer::GetPixelAt(uint32_t x, uint32_t y) const
+symbol_t WaveletDecodeLayer::GetPixelAt(uint32_t x, uint32_t y) const
 {
     return pixelVals[y * GetWidth() + x];
 }

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <vector>
-#include <memory>
+#include <stdint.h>
 
 class WaveletLayerSize
 {

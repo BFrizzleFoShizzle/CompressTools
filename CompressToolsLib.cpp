@@ -14,7 +14,7 @@ struct CompressToolsLib::CompressedImageFile
 	std::string filename;
 	std::shared_ptr<CompressedImage> image;
 	// TODO REMOVE AFTER TESTING used if preloading
-	std::vector<uint16_t> decodedPixels;
+	std::vector<symbol_t> decodedPixels;
 	std::mutex lock;
 };
 
@@ -46,7 +46,7 @@ __declspec(dllexport) uint16_t CompressToolsLib::ReadHeightValue(CompressedImage
 		return 0;
 	}
 	image->lock.lock();
-	uint16_t val;
+	symbol_t val;
 	// HACK if preloading use preloaded cache
 	if(image->decodedPixels.size() > 0)
 		val = image->decodedPixels[y * image->image->GetWidth() + x];
@@ -105,8 +105,8 @@ __declspec(dllexport) size_t CompressToolsLib::GetMemoryUsage(CompressedImageFil
 __declspec(dllexport) void CompressToolsLib::GetBottomPixels(CompressedImageFileHdl image, uint16_t* values)
 {
 	image->lock.lock();
-	std::vector<uint16_t> vals = image->image->GetBottomLevelPixels();
-	memcpy(values, &vals[0], sizeof(uint16_t) * vals.size());
+	std::vector<symbol_t> vals = image->image->GetBottomLevelPixels();
+	memcpy(values, &vals[0], sizeof(symbol_t) * vals.size());
 	image->lock.unlock();
 	return;
 }

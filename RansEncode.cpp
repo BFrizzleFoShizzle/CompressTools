@@ -1,5 +1,4 @@
-#include <vector>
-#include <unordered_map>
+
 #include "Release_Assert.h"
 #include <iostream>
 #include <algorithm>
@@ -9,6 +8,8 @@
 const uint32_t COMPRESSED_LOOKUP_BINS = 4096;
 const uint32_t ROOT_BIN_SIZE = 3;
 // Ported from my old Python implementation
+
+constexpr uint16_t PIVOT_INVALID = 0xFFFF;
 
 // helper for deterministic entropy sorting
 bool EntropyLess(const SymbolPDF& count1, const SymbolPDF& count2)
@@ -33,95 +34,9 @@ std::vector<SymbolPDF> EntropySortSymbols(const SymbolCountDict &dict)
 	return std::move(countsVec);
 }
 
-CDFTable::CDFTable(const SymbolCountDict& counts, uint32_t probabilityRes)
-{
-	std::vector<SymbolPDF> sortedPDFs = EntropySortSymbols(counts);
-	symbols.reserve(sortedPDFs.size());
-	uint32_t groupStart = 0;
-	uint32_t currentCDF = 0;
-	uint32_t groupPDF = sortedPDFs[0].pdf;
-
-	// for all values before this, groupStart == groupNum
-	pivot = -1;
-
-	for (auto symbolPDF : sortedPDFs)
-	{
-		if (symbolPDF.pdf != groupPDF)
-		{
-			// push last group
-			groupCDFs.push_back(currentCDF);
-			if (pivot == -1 && symbols.size() - groupStart > 1)
-				pivot = groupStart;
-			if (pivot != -1)
-				groupStarts.push_back(groupStart);
-			// start new group
-			groupStart = symbols.size();
-			groupPDF = symbolPDF.pdf;
-		}
-		symbols.push_back(symbolPDF.symbol);
-		currentCDF += symbolPDF.pdf;
-	}
-	// push last group
-	groupCDFs.push_back(currentCDF);
-	groupStarts.push_back(groupStart);
-
-	std::cout << symbols.size() << " symbols" << std::endl;
-	std::cout << groupCDFs.size() << " groups" << std::endl;
-}
-
-RansGroup CDFTable::GetSymbolGroup(uint32_t symbolCDF)
-{
-	// find matching group
-	const uint32_t* __restrict groupCDFp = &groupCDFs.front();
-	const uint32_t* groupCDFEnd = &groupCDFs.back();
-	for (; groupCDFp <= groupCDFEnd; ++groupCDFp)
-	{
-		if (*groupCDFp > symbolCDF)
-			break;
-	}
-
-	// calculate PDF
-	uint32_t groupStartCDF = 0;
-	if (groupCDFp != &groupCDFs.front())
-		groupStartCDF = groupCDFp[-1];
-	const uint32_t groupPDF = (*groupCDFp) - groupStartCDF;
-
-	// get index from pointers
-	uint16_t groupIdx = groupCDFp - &groupCDFs.front();
-
-	// fast path for values before the pivot
-	if (groupIdx < pivot)
-		return RansGroup(0, symbols[groupIdx], groupPDF, groupStartCDF);
-
-	// calculate num. symbols
-	uint32_t nextGroupStart = symbols.size();
-	// convert to group start index
-	groupIdx -= pivot;
-	if (groupCDFp != groupCDFEnd)
-		nextGroupStart = groupStarts[groupIdx + 1ul];
-	const uint32_t groupCount = nextGroupStart - groupStarts[groupIdx];
-
-	return RansGroup(groupStarts[groupIdx], groupCount, groupPDF, groupStartCDF);
-}
-
-uint16_t CDFTable::GetSymbol(RansGroup group, uint32_t symbolIndex)
-{
-	//if (group.start + symbolIndex >= symbols.size())
-	//	std::cout << "BAD INDEX " << group.start + symbolIndex << " " << symbols.size() << std::endl;
-	return symbols[group.start + symbolIndex];
-}
-
-uint16_t CDFTable::GetSymbolIdxInGroup(RansGroup group, uint16_t symbol)
-{
-	assert(group.start != 0);
-	for (int i = 0; i < group.count; ++i)
-		if (symbols[group.start + i] == symbol)
-			return i;
-	std::cout << "error finding symbol " << symbol << std::endl;
-	return -1;
-}
-
-SymbolCountDict GenerateQuantizedPDFs(SymbolCountDict unquantizedCounts, size_t probabilityRes)
+// TODO clean up this massive, hulking, leviathan of a function
+CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilityRes,
+	std::unordered_map<symbol_t, RansGroup>& symbolGroupsOut, std::unordered_map<symbol_t, symidx_t>& symbolSubIdxOut)
 {
 	size_t probabilityRange = 1 << probabilityRes;
 
@@ -132,151 +47,524 @@ SymbolCountDict GenerateQuantizedPDFs(SymbolCountDict unquantizedCounts, size_t 
 	}
 
 	// already quantized
-	if (countsSum == probabilityRange)
-		return unquantizedCounts;
+	if (countsSum == probabilityRange || countsSum == 65535)
+	{
+		// TODO
+		assert(false);
+	}
 
 	// TODO move elsewhere?
 	std::vector<SymbolPDF> sortedSymbolCounts = EntropySortSymbols(unquantizedCounts);
 
-	//std::cout << "Generating quantized symbols..." << std::endl;
-	uint64_t quantizedPDFsSum = 0;
-	// TODO this will probably fail if quantized probabilites overflow 32-bits
-	SymbolCountDict quantizedPDFs;
+	// Step 1: group equal counts
+	std::vector<std::vector<SymbolPDF>> initialGroups;
+	//SymbolCountDict initialGroupCounts;
+	std::vector<SymbolPDF> initialGroupCounts;
+	std::vector<symidx_t> initialStarts;
+
+	symidx_t groupStart = 0;
+	// confusingly, this is the "count" shared by symbols in the current group, not the count of the group itself
+	count_t groupCount = sortedSymbolCounts[0].pdf;
+	// this is the sum of counts of all symbols in the group
+	count_t currentCount = 0;
+	symidx_t symbolIndex = 0;
+	initialGroups.emplace_back();
+	initialStarts.push_back(0);
+
 	for (auto symbolCount : sortedSymbolCounts)
 	{
-		// TODO check for integer overflow
-		uint64_t newCount = (symbolCount.pdf * probabilityRange) / countsSum;
-		newCount = std::max(1ull, newCount);
-		quantizedPDFs.emplace(symbolCount.symbol, newCount);
-		quantizedPDFsSum += newCount;
+		if (symbolCount.pdf != groupCount)
+		{
+			// push last group
+			initialGroupCounts.emplace_back(initialGroups.size() - 1, currentCount);
+			initialGroups.emplace_back();
+			// start new group
+			groupStart = symbolIndex;
+			initialStarts.push_back(groupStart);
+			groupCount = symbolCount.pdf;
+			currentCount = 0;
+		}
+		++symbolIndex;
+		initialGroups.back().push_back(symbolCount);
+		currentCount += symbolCount.pdf;
+	}
+	// push end group
+	initialGroupCounts.emplace_back(initialGroups.size() - 1, currentCount);
+
+	double initialEntropy = 0;
+	for (auto groupCount : initialGroupCounts)
+	{
+		double groupProbability = groupCount.pdf;
+		groupProbability /= countsSum;
+		// entropy of encoding group index
+		double groupEncodeEntropy = groupCount.pdf * -log2(groupProbability);
+		// probability encoding sub-index
+		double groupSymbolProbability = 1;
+		groupSymbolProbability /= initialGroups[groupCount.symbol].size();
+		// entropy of encoding sub-index
+		double groupSymbolEntropy = groupCount.pdf * -log2(groupSymbolProbability);
+		initialEntropy += groupEncodeEntropy;
+		initialEntropy += groupSymbolEntropy;
 	}
 
-	if (quantizedPDFsSum > probabilityRange)
+	// Step 2: quantize groups
+	count_t quantizedGroupPDFsSum = 0;
+	SymbolCountDict quantizedGroupPDFs;
+	for (auto symbolCount : initialGroupCounts)
+	{
+		uint64_t newCount = (symbolCount.pdf * probabilityRange) / countsSum;
+		assert(newCount <= probabilityRange);
+		newCount = std::max(1ull, newCount);
+		quantizedGroupPDFs.emplace(symbolCount.symbol, newCount);
+		quantizedGroupPDFsSum += newCount;
+	}
+
+	// Step 3: fix probability overflow/underflow
+	if (quantizedGroupPDFsSum > probabilityRange)
 		std::cout << "Fixing probability underflow..." << std::endl;
+
 	// SUPER ineffient way of dealing with overflowing probabilities
-	while (quantizedPDFsSum > probabilityRange)
+	// TODO https://cbloomrants.blogspot.com/2014/02/02-11-14-understanding-ans-10.html
+	while (quantizedGroupPDFsSum > probabilityRange)
 	{
 		double smallestError = probabilityRange;
-		uint32_t smallestErrorSymbol = -1;
-		for (auto quantizedPDF : quantizedPDFs)
+		group_t smallestErrorGroup = -1;
+		for (auto quantizedPDF : quantizedGroupPDFs)
 		{
-			const uint16_t symbol = quantizedPDF.first;
-			const uint32_t quantizedSymbolPDF = quantizedPDF.second;
-			const uint32_t symbolCount = unquantizedCounts.at(quantizedPDF.first);
+			const group_t group = quantizedPDF.first;
+			const count_t quantizedSymbolPDF = quantizedPDF.second;
+			const count_t symbolCount = initialGroupCounts.at(group).pdf;
 			// can't reduce a probability to zero
 			if (quantizedPDF.second == 1)
 				continue;
 			// Entropy cost of reducing probability
 			// (TODO This can probably be simplified to something cheap, but D-Day is in 2 days...)
 			double oldProbability = quantizedPDF.second;
-			oldProbability /= quantizedPDFsSum;
+			oldProbability /= quantizedGroupPDFsSum;
 			double oldEntropy = symbolCount * -log2(oldProbability);
 			double newProbability = quantizedPDF.second - 1;
-			// TODO Should we have a -1 here? Seems sketch...
-			newProbability /= quantizedPDFsSum;
+			newProbability /= quantizedGroupPDFsSum;
 			double newEntropy = symbolCount * -log2(newProbability);
 			// newEntropy will be larger
 			double entropyError = newEntropy - oldEntropy;
 			if (entropyError < smallestError)
 			{
 				smallestError = entropyError;
-				smallestErrorSymbol = symbol;
+				smallestErrorGroup = group;
 			}
 		}
 		// we now have the symbol that gives the smallest-entropy error
 		// when subtracting one from it's quantized count/probability
 		// TODO ERROR
-		assert(smallestErrorSymbol != -1);
+		assert(smallestErrorGroup != -1);
 
 		// subtract one from probability
-		quantizedPDFs[smallestErrorSymbol] -= 1;
-		quantizedPDFsSum -= 1;
+		quantizedGroupPDFs[smallestErrorGroup] -= 1;
+		quantizedGroupPDFsSum -= 1;
 	}
 
-	if (quantizedPDFsSum < probabilityRange)
+	if (quantizedGroupPDFsSum < probabilityRange)
 		std::cout << "Fixing probability overflow..." << std::endl;
+
 	// SUPER ineffient way of dealing with overflowing probabilities
-	while (quantizedPDFsSum < probabilityRange)
+	while (quantizedGroupPDFsSum < probabilityRange)
 	{
 		double biggestGain = 0;
-		uint32_t biggestGainSymbol = -1;
-		for (auto quantizedPDF : quantizedPDFs)
+		group_t biggestGainGroup = -1;
+		for (auto quantizedPDF : quantizedGroupPDFs)
 		{
 			// TODO this is a bad metric...
 			if (quantizedPDF.second > biggestGain)
 			{
 				biggestGain = quantizedPDF.second;
-				biggestGainSymbol = quantizedPDF.first;
+				biggestGainGroup = quantizedPDF.first;
 			}
 		}
-		assert(biggestGainSymbol != -1);
+		assert(biggestGainGroup != -1);
 
 		// Add one to probability
-		quantizedPDFs[biggestGainSymbol] += 1;
-		quantizedPDFsSum += 1;
+		quantizedGroupPDFs[biggestGainGroup] += 1;
+		quantizedGroupPDFsSum += 1;
 	}
 
-	return quantizedPDFs;
+	double quantizedEntropy = 0;
+	for (auto groupCount : initialGroupCounts)
+	{
+		double groupProbability = quantizedGroupPDFs[groupCount.symbol];
+		groupProbability /= probabilityRange;
+		// entropy of encoding group index
+		double groupEncodeEntropy = groupCount.pdf * -log2(groupProbability);
+		// probability encoding sub-index
+		double groupSymbolProbability = 1;
+		groupSymbolProbability /= initialGroups[groupCount.symbol].size();
+		// entropy of encoding sub-index
+		double groupSymbolEntropy = groupCount.pdf * -log2(groupSymbolProbability);
+		quantizedEntropy += groupEncodeEntropy;
+		quantizedEntropy += groupSymbolEntropy;
+	}
+
+	// Step 4: merge quantized groups (we don't need to re-sort)
+	// TODO the ideal way would be to quantize while merging to better preserve probabilities of groups with low PDF after quantizing
+	// sorted, merged, quantized, merged - this is more or less the highest-resolution most-compact representation at a given quantization level
+	SymbolCountDict finalGroupPDFs;
+	// number of unique symbols in the group
+	std::vector<symidx_t> finalGroupEntryCounts;
+	// unquantized count of symbols in stream for each quantized group
+	std::vector<count_t> finalGroupSymbolCounts;
+	std::vector<symidx_t> finalGroupStarts;
+
+	// confusingly, this is the "count" shared by symbols in the current group, not the count of the group itself
+	prob_t groupPDF = quantizedGroupPDFs[initialGroupCounts[0].symbol];
+	// this is the sum of counts of all symbols in the group
+	prob_t currentQuantizedPDF = 0;
+	finalGroupEntryCounts.push_back(0);
+	finalGroupSymbolCounts.push_back(0);
+	finalGroupStarts.push_back(initialStarts[0]);
+
+	// combine groups with equal quantized PDF
+	for (auto symbolGroupCount : initialGroupCounts)
+	{
+		prob_t quantizedPDF = quantizedGroupPDFs[symbolGroupCount.symbol];
+		count_t unquantizedCount = symbolGroupCount.pdf;
+		if (quantizedPDF != groupPDF)
+		{
+			finalGroupPDFs.emplace(finalGroupEntryCounts.size() - 1, currentQuantizedPDF);
+			finalGroupEntryCounts.push_back(0);
+			finalGroupSymbolCounts.push_back(0);
+			finalGroupStarts.push_back(initialStarts[symbolGroupCount.symbol]);
+			// start new group
+			groupPDF = quantizedPDF;
+			currentQuantizedPDF = 0;
+		}
+		finalGroupEntryCounts.back() += initialGroups[symbolGroupCount.symbol].size();
+		finalGroupSymbolCounts.back() += unquantizedCount;
+		currentQuantizedPDF += quantizedPDF;
+	}
+	// push end group
+	finalGroupPDFs.emplace(finalGroupSymbolCounts.size() - 1, currentQuantizedPDF);
+
+	// Step 5: re-sort after merging
+	// fast path comes first
+	std::vector<SymbolPDF> finalSymbolGroupsPreSplit = EntropySortSymbols(finalGroupPDFs);
+	std::vector<SymbolPDF> fastPath;
+	std::vector<SymbolPDF> slowPath;
+	for (SymbolPDF groupPDF : finalSymbolGroupsPreSplit)
+	{
+		if (finalGroupEntryCounts[groupPDF.symbol] == 1)
+			fastPath.push_back(groupPDF);
+		else
+			slowPath.push_back(groupPDF);
+	}
+	// merge back into final ordered group list, all fast path come first
+	std::vector<SymbolPDF> finalSymbolGroupPDFs;
+	for (SymbolPDF groupPDF : fastPath)
+		finalSymbolGroupPDFs.push_back(groupPDF);
+	for (SymbolPDF groupPDF : slowPath)
+		finalSymbolGroupPDFs.push_back(groupPDF);
+
+	// Step 6: generate final internal state
+	double finalEntropy = 0;
+	count_t finalCount = 0;
+	symidx_t finalSymbols = 0;
+	// this will overflow if we use prob_t
+	count_t finalCDF = 0;
+	// Step 6: rearrange symbols to follow the sorted qantized group order
+	pivotIdx = PIVOT_INVALID;
+	for (auto groupPDF : finalSymbolGroupPDFs)
+	{
+		// check start
+		symidx_t groupEntryCount = finalGroupEntryCounts[groupPDF.symbol];
+		// pivot is at CDF start of first block with >1 children
+		if (pivotIdx == PIVOT_INVALID && groupEntryCount > 1)
+		{
+			pivotIdx = groupCDFs.size();
+			pivotCDF = finalCDF;
+		}
+		count_t groupSymbolCount = finalGroupSymbolCounts[groupPDF.symbol];
+		finalSymbols += groupEntryCount;
+		finalCount += groupSymbolCount;
+		double groupProbability = groupPDF.pdf;
+		groupProbability /= probabilityRange;
+		// entropy of encoding group index
+		double groupEncodeEntropy = groupSymbolCount * -log2(groupProbability);
+		double groupSymbolProbability = 1;
+		groupSymbolProbability /= groupEntryCount;
+		// entropy of encoding sub-index
+		double groupSymbolEntropy = groupSymbolCount * -log2(groupSymbolProbability);
+		finalEntropy += groupEncodeEntropy;
+		finalEntropy += groupSymbolEntropy;
+		symidx_t oldGroupStart = finalGroupStarts[groupPDF.symbol];
+		symidx_t newGroupStart = symbols.size();
+		// TODO move this check earlier
+		assert(oldGroupStart < 65536);
+		assert(newGroupStart < 65536);
+		// Final check for if all symbols are in the correct group
+		count_t checkedCount = 0;
+		for (int i = 0; i < groupEntryCount; ++i)
+		{
+			symbol_t symbol = sortedSymbolCounts[oldGroupStart + i].symbol;
+			if (symbol == 0)
+				std::cout << "zero " << std::endl;
+			checkedCount += sortedSymbolCounts[oldGroupStart + i].pdf;
+			symbols.push_back(symbol);
+		}
+		finalCDF += groupPDF.pdf;
+		groupCDFs.push_back(finalCDF);
+		if (groupSymbolCount != checkedCount)
+		{
+			std::cout << "BAD VALUE " << groupPDF.symbol << " " << newGroupStart << " " << (newGroupStart + groupEntryCount) << " " << oldGroupStart << " " << (oldGroupStart + groupEntryCount) << " " << checkedCount << " " << groupSymbolCount << std::endl;
+			return;
+		}
+		if (pivotIdx != PIVOT_INVALID)
+			groupStarts.push_back(newGroupStart);
+		assert(groupSymbolCount == checkedCount);
+	}
+	// fix the last CDF entry (needed if probabilityRange == 1 << sizeof(probability))
+	groupCDFs.back() = probabilityRange - 1;
+
+	std::cout << initialGroupCounts.size() << " initial groups" << std::endl;
+	std::cout << finalGroupSymbolCounts.size() << " final groups" << std::endl;
+	std::cout << countsSum << " initial count" << std::endl;
+	std::cout << finalCount << " final count" << std::endl;
+	std::cout << sortedSymbolCounts.size() << " initial symbol entries" << std::endl;
+	std::cout << finalSymbols << " final symbol entries" << std::endl;
+	std::cout << probabilityRange << " target CDF" << std::endl;
+	std::cout << finalCDF << " final CDF" << std::endl;
+	std::cout << pivotIdx << " pivot idx" << std::endl;
+	std::cout << pivotCDF << " pivot CDF" << std::endl;
+	std::cout << int(initialEntropy / 8) << " initial entropy (bytes)" << std::endl;
+	std::cout << int(quantizedEntropy / 8) << " quantized entropy (bytes)" << std::endl;
+	std::cout << int(finalEntropy / 8) << " final entropy (bytes)" << std::endl;
+
+	std::cout << symbols.size() << " symbols" << std::endl;
+	std::cout << groupCDFs.size() << " groups" << std::endl;
+
+	// generate encoding tables
+	prob_t lastCDF = 0;
+	for (int i = 0; i < groupCDFs.size();++i)
+	{
+		prob_t groupCDF = groupCDFs[i];
+		prob_t groupPDF = groupCDF - lastCDF;
+
+		// fast path
+		symidx_t groupEntryCount = 1;
+		symidx_t groupStart = i;
+
+		// slow path
+		if (i >= pivotIdx)
+		{
+			// convert to group start index
+			groupStart -= pivotIdx;
+			symidx_t nextGroupStart = symbols.size();
+			if (groupStart < groupStarts.size() - 1)
+				nextGroupStart = groupStarts[groupStart + 1];
+			// get actual start
+			groupStart = groupStarts[groupStart];
+			groupEntryCount = nextGroupStart - groupStart;
+		}
+
+		for (int j = 0; j < groupEntryCount; ++j)
+		{
+			symbol_t symbol = symbols[groupStart + j];
+			symbolGroupsOut[symbol] = RansGroup(groupStart, groupEntryCount, groupPDF, lastCDF);
+			symbolSubIdxOut[symbol] = j;
+		}
+
+		lastCDF = groupCDF;
+	}
+
+	// check all symbols encode/decode correctly
+	for (auto symbolCount : unquantizedCounts)
+	{
+		symbol_t symbol = symbolCount.first;
+		RansGroup group = symbolGroupsOut[symbol];
+
+		// check group CDF lookup
+		RansGroup test1 = GetSymbolGroup(group.cdf);
+		assert(test1.pdf == group.pdf);
+		assert(test1.cdf == group.cdf);
+		// test output
+		if (test1.start == 0)
+		{
+			assert(group.count == 1);
+			assert(test1.count == symbol);
+		}
+		else
+		{
+			assert(test1.start == group.start);
+			assert(test1.count == group.count);
+			symidx_t subIdx = symbolSubIdxOut[symbol];
+			assert(symbol == GetSymbol(test1, subIdx));
+		}
+		RansGroup test2 = GetSymbolGroup(group.cdf + group.pdf - 1);
+		assert(test2.pdf == group.pdf);
+		assert(test2.cdf == group.cdf);
+		// test output
+		if (test2.start == 0)
+		{
+			assert(group.count == 1);
+			assert(test2.count == symbol);
+		}
+		else
+		{
+			assert(test2.start == group.start);
+			assert(test2.count == group.count);
+			symidx_t subIdx = symbolSubIdxOut[symbol];
+			assert(symbol == GetSymbol(test2, subIdx));
+		}
+	}
+
+	// if we reach this point, all symbol CDF values decode to themselves
 }
 
+CDFTable::CDFTable(const TableGroupList& groupList, uint32_t probabilityRes)
+{
+	pivotIdx = PIVOT_INVALID;
+	pivotCDF = 0;
+	groupCDFs.reserve(groupList.size());
+	for (int group = 0; group < groupList.size(); ++group)
+	{
+		prob_t groupCDF = groupList[group].first;
+		symidx_t groupCount = groupList[group].second.size();
+		if (pivotIdx == PIVOT_INVALID && groupCount > 1)
+		{
+			pivotIdx = groupCDFs.size();
+			if(group > 0)
+				pivotCDF = groupList[group - 1].first;
+		}
+
+		if (pivotIdx != PIVOT_INVALID)
+		{
+			// create group start
+			symidx_t groupStart = symbols.size();
+			groupStarts.push_back(groupStart);
+			//std::cout << group << " " << groupStart << " " << groupCount << " " << groupCDF << std::endl;
+		}
+		else
+		{
+			//std::cout << group << " " << groupCount << " " << groupCDF << std::endl;
+		}
+
+		// load symbols
+		symbols.insert(symbols.end(), groupList[group].second.begin(), groupList[group].second.end());
+
+		// create group CDF
+		groupCDFs.push_back(groupCDF);
+	}
+
+	assert(groupCDFs.back() == probabilityRes || groupCDFs.back() == 65535);
+}
+
+RansGroup CDFTable::GetSymbolGroup(prob_t symbolCDF)
+{
+	// find matching group
+	const prob_t* __restrict groupCDFp = &groupCDFs.front();
+	const prob_t* groupCDFEnd = &groupCDFs.back();
+	if (symbolCDF >= pivotCDF)
+		groupCDFp += pivotIdx;
+	for (; groupCDFp < groupCDFEnd; ++groupCDFp)
+	{
+		if (*groupCDFp > symbolCDF)
+			break;
+	}
+
+	//assert(*groupCDFp > symbolCDF || symbolCDF == groupCDFs.back());
+
+	// calculate PDF
+	prob_t groupStartCDF = 0;
+	if (groupCDFp != &groupCDFs.front())
+		groupStartCDF = groupCDFp[-1];
+	const prob_t groupPDF = (*groupCDFp) - groupStartCDF;
+
+	// get index from pointers
+	group_t groupIdx = groupCDFp - &groupCDFs.front();
+
+	// fast path for values before the pivot
+	if (groupStartCDF < pivotCDF)
+		return RansGroup(0, symbols[groupIdx], groupPDF, groupStartCDF);
+
+	// calculate num. symbols
+	symidx_t nextGroupStart = symbols.size();
+	// convert to group start index
+	groupIdx -= pivotIdx;
+	if (groupCDFp != groupCDFEnd)
+		nextGroupStart = groupStarts[groupIdx + 1u];
+	const symidx_t groupCount = nextGroupStart - groupStarts[groupIdx];
+
+	return RansGroup(groupStarts[groupIdx], groupCount, groupPDF, groupStartCDF);
+}
+
+symbol_t CDFTable::GetSymbol(RansGroup group, symidx_t symbolIndex)
+{
+	//if (group.start + symbolIndex >= symbols.size())
+	//	std::cout << "BAD INDEX " << group.start + symbolIndex << " " << symbols.size() << std::endl;
+	return symbols[group.start + symbolIndex];
+}
+
+TableGroupList CDFTable::GenerateGroupCDFs()
+{
+	TableGroupList groupList;
+
+	// fast-path groups
+	for (group_t groupIdx = 0; groupIdx < pivotIdx; ++groupIdx)
+	{
+		std::vector<symbol_t> groupSymbols;
+		groupSymbols.push_back(symbols[groupIdx]);
+		groupList.emplace_back(groupCDFs[groupIdx], std::move(groupSymbols));
+		//std::cout << groupIdx << " " << 1 << " " << groupCDFs[groupIdx] << std::endl;
+	}
+	// slow-path groups
+	for (group_t groupIdx = pivotIdx; groupIdx < pivotIdx + groupStarts.size(); ++groupIdx)
+	{
+		group_t startIndex = groupIdx - pivotIdx;
+		std::vector<symbol_t> groupSymbols;
+		symidx_t groupStart = groupStarts[startIndex];
+		symidx_t nextStart = symbols.size();
+		if(startIndex < groupStarts.size() - 1)
+			nextStart = groupStarts[startIndex + 1];
+		symidx_t numChildren = nextStart - groupStart;
+		for (int i = 0; i < numChildren; ++i)
+			groupSymbols.push_back(symbols[groupStart + i]);
+
+		groupList.emplace_back(groupCDFs[groupIdx], std::move(groupSymbols));
+		//std::cout << groupIdx << " " << groupStart << " " << numChildren << " " << groupCDFs[groupIdx] << std::endl;
+	}
+
+	return groupList;
+}
 
 RansTable::RansTable(SymbolCountDict unquantizedCounts, uint32_t probabilityRes)
 {
-	SymbolCountDict PDFs = GenerateQuantizedPDFs(unquantizedCounts, probabilityRes);
-
-	// TODO symbols get sorted twice (1st time in cdfTable constructor)
-	std::vector<SymbolPDF> sortedPDFs = EntropySortSymbols(PDFs);
-	cdfTable = CDFTable(PDFs, probabilityRes);
-
-	// for encoding
-	uint32_t currCDF = 0;
-	for (auto symbolPDF : sortedPDFs)
-	{
-		RansEntry ransEntry = RansEntry(symbolPDF.symbol, currCDF);
-		symbolTable.emplace(symbolPDF.symbol, ransEntry);
-		currCDF += symbolPDF.pdf;
-	}
-	// debug code
-	/*
-	for (auto symbolPDF : symbolTable)
-	{
-		RansGroup group = cdfTable.GetSymbolGroup(symbolPDF.second.cdf);
-		// fast path
-		uint16_t entry = group.count;
-		// slow path
-		if (group.start != 0)
-		{
-			uint32_t idx = cdfTable.GetSymbolIdxInGroup(group, symbolPDF.first);
-			entry = cdfTable.GetSymbol(group, idx);
-		}
-		if (entry != symbolPDF.second.symbol)
-		{
-
-			std::cout << "cdfTable test fail " << symbolPDF.first << " " << symbolPDF.second.cdf << " " << std::endl;
-			assert(false);
-			break;
-		}
-	}
-	*/
+	cdfTable = CDFTable(unquantizedCounts, probabilityRes, symbolGroups, symbolSubIdx);
 }
 
-RansEntry RansTable::GetSymbolEntry(uint16_t symbol)
+RansTable::RansTable(const TableGroupList& groupList, uint32_t probabilityRes)
 {
-	return symbolTable[symbol];
+	cdfTable = CDFTable(groupList, probabilityRes);
 }
 
-uint16_t RansTable::GetSymbolIdxInGroup(const RansGroup group, const uint16_t symbol)
+TableGroupList RansTable::GenerateGroupCDFs()
 {
-	return cdfTable.GetSymbolIdxInGroup(group, symbol);
+	return cdfTable.GenerateGroupCDFs();
+}
+
+RansGroup RansTable::GetSymbolGroup(symbol_t symbol)
+{
+	return symbolGroups[symbol];
+}
+
+symidx_t RansTable::GetSymbolSubIdx(const symbol_t symbol)
+{
+	return symbolSubIdx[symbol];
 }
 
 // Cumulative probability to rANS group
-RansGroup RansTable::GetSymbolGroupFromFreq(const uint32_t prob)
+RansGroup RansTable::GetSymbolGroupFromFreq(const prob_t prob)
 {
 	return cdfTable.GetSymbolGroup(prob);
 }
 
-uint16_t RansTable::GetSymbolEntryFromGroup(const RansGroup group, const uint16_t subIndex)
+symbol_t RansTable::GetSymbolFromGroup(const RansGroup group, const symidx_t subIndex)
 {
 	return cdfTable.GetSymbol(group, subIndex);
 }
@@ -284,7 +572,8 @@ uint16_t RansTable::GetSymbolEntryFromGroup(const RansGroup group, const uint16_
 size_t RansTable::GetMemoryFootprint() const
 {
 	// this isn't that accurate
-	size_t mapSize = std::max(symbolTable.bucket_count(), symbolTable.size()) * sizeof(std::unordered_map< uint16_t, RansEntry>::value_type);
+	// TODO UPDATE
+	size_t mapSize = 0;// std::max(symbolTable.bucket_count(), symbolTable.size()) * sizeof(std::unordered_map<uint16_t, RansEntry>::value_type);
 	// TODO UPDATE
 	size_t vectorSize = 0;// cdfTable.capacity() * sizeof(RansEntry);
 
@@ -301,29 +590,24 @@ RansState::RansState()
 RansState::RansState(uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
 	: ransTable()
 {
-	compressedBlocks = std::shared_ptr<VectorStream<uint8_t>>(new VectorVectorStream<uint8_t>());
+	compressedBlocks = std::shared_ptr<VectorStream<block_t>>(new VectorVectorStream<block_t>());
 
-	//std::cout << "STARTING" << std::endl;
 	// Initialize rANS encoding parameters
 	probabilityRange = 1 << probabilityRes;
 	blockSize = 1 << outputBlockSize;
 	stateMin = probabilityRange;
 	stateMax = (stateMin * blockSize) - 1;
 	
-	SymbolCountDict quantizedPDFs = GenerateQuantizedPDFs(counts, probabilityRange);
-
-	//std::cout << "generating rANS table..." << std::endl;
-	// Our quantized probabilites now sum to exactly probabilityRange,
-	// which is require for rANS to work
-	ransTable = std::make_shared<RansTable>(quantizedPDFs, probabilityRes);
+	ransTable = std::make_shared<RansTable>(counts, probabilityRes);
 	// You can technically set initial rANS state to anything, but I choose the min. val
 	ransState = stateMin;
+	//ransState2 = stateMin;
 }
 
 // fast constructor
 RansState::RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
 {
-	compressedBlocks = std::shared_ptr<VectorStream<uint8_t>>(new VectorVectorStream<uint8_t>());
+	compressedBlocks = std::shared_ptr<VectorStream<block_t>>(new VectorVectorStream<block_t>());
 
 	// Initialize rANS encoding parameters
 	probabilityRange = 1 << probabilityRes;
@@ -334,46 +618,227 @@ RansState::RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolT
 	ransTable = symbolTable;
 	// You can technically set initial rANS state to anything, but I choose the min. val
 	ransState = stateMin;
+	//ransState2 = stateMin;
 }
 
 // initialize for decoding
-RansState::RansState(std::shared_ptr<VectorStream<uint8_t>> compressedBlocks, uint64_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
+RansState::RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, SymbolCountDict counts, uint32_t outputBlockSize)
 	: RansState(probabilityRes, counts, outputBlockSize)
 {
 	this->compressedBlocks = compressedBlocks;
 	this->ransState = ransState;
+	//this->ransState2 = ransState >> 32;
 }
 
-RansState::RansState(std::shared_ptr<VectorStream<uint8_t>>  compressedBlocks, uint64_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
+RansState::RansState(std::shared_ptr<VectorStream<block_t>>  compressedBlocks, state_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable, uint32_t outputBlockSize)
 	: RansState(probabilityRes, symbolTable, outputBlockSize)
 {
 	this->compressedBlocks = compressedBlocks;
 	this->ransState = ransState;
+	//this->ransState2 = ransState >> 32;
 }
 
-// Encode symbol
-void RansState::AddSymbol(uint16_t symbol)
-{
-	// Write sub-index
-	RansEntry entry = ransTable->GetSymbolEntry(symbol);
 
-	RansGroup group = ransTable->GetSymbolGroupFromFreq(entry.cdf);
-	if (group.cdf> entry.cdf || entry.cdf > group.cdf + group.pdf)
+void RansState::AddGroup(RansGroup group)
+{
+	//std::cout << "State1: " << ransState << std::endl;
+	/*
+	while (ransState >= blockSize * group.pdf)
 	{
-		std::cout << group.cdf << " " << group.pdf << " " << entry.cdf << std::endl;
-		std::cout << "Bad group range" << std::endl;
+		compressedBlocks->push_back(ransState % blockSize);
+		ransState /= blockSize;
+	}
+
+	std::cout << "State2: " << ransState << std::endl;
+	*/
+
+	// renormalize if necessary
+
+	assert(group.cdf < probabilityRange);
+
+	// write group (also handles fast path)
+	// add symbol to rANS state
+	state_t newState = ransState / group.pdf;
+	newState *= probabilityRange;
+	newState += group.cdf;
+	newState += ransState % group.pdf;
+
+	int count = 0;
+	while (newState > stateMax)
+	{
+		compressedBlocks->push_back(ransState % blockSize);
+		//std::cout << "push " << int(compressedBlocks->back()) << std::endl;
+		ransState /= blockSize;
+		newState = ransState / group.pdf;
+		newState *= probabilityRange;
+		newState += group.cdf;
+		newState += ransState % group.pdf;
+		++count;
+		if (count > 100)
+		{
+			std::cout << "RANS STUCK IN LOOP?" << std::endl;
+			continue;
+		}
+	}
+
+	assert(count != 3);
+
+	/*
+	// renormalize if necessary
+	if (newState > stateMax)
+	{
+		compressedBlocks->push_back(ransState % blockSize);
+		std::cout << "push " << int(compressedBlocks->back()) << std::endl;
+		ransState /= blockSize;
+		AddGroup(group);
+		return;
+	}
+	std::cout << "State1.5: " << ransState << std::endl;
+	*/
+	/*
+	// renormalize if necessary
+	while (newState > stateMax)
+	{
+		compressedBlocks->push_back(ransState % blockSize);
+		ransState /= blockSize;
+		newState = ransState / group.pdf;
+		newState *= probabilityRange;
+		newState += group.cdf;
+		newState += ransState % group.pdf;
+	}
+	*/
+	ransState = newState;
+	//std::cout << "State3: " << ransState << std::endl;
+
+	// current state is the state our value will be decoded at
+	assert(ransState >= stateMin);
+	assert(ransState <= stateMax);
+}
+
+void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
+{
+	// find symbol idx in group
+	symidx_t symbolIdx = ransTable->GetSymbolSubIdx(symbol);
+	//std::cout << "adding symbol idx " << symbol << " " << symbolIdx << " " << group.count << std::endl;
+
+	// double-check
+	if (ransTable->GetSymbolFromGroup(group, symbolIdx) != symbol)
+	{
+		std::cout << group.cdf << " " << group.pdf << std::endl;
+		std::cout << "Bad symbol encode " << symbol << " " << symbolIdx << std::endl;
 		return;
 	}
 
+	assert(symbolIdx < group.count);
+	assert(group.count > 1);
+	assert(group.count < probabilityRange);
+
+	//std::cout << "State1: " << ransState2 << std::endl;
+	// renormalize if necessary
+	int count = 0;
+
+	// TODO FIX THIS
+	//while (ransState2 >= blockSize * (stateMin / probabilityRange))
+	/*
+	while ((ransState2 * group.count) + symbolIdx > stateMax
+		// TODO dumb hack to work around rounding issues
+		&& ((ransState2 / blockSize) * group.count) + symbolIdx >= stateMin)
+		*/
+	// if adding this value stops underflow from triggering, we need to trigger underflow
+	//while (((ransState2 * group.count) + symbolIdx) / blockSize >= stateMin)
+	// floating min
+	/*
+	while ((ransState2 * group.count) + symbolIdx > (blockSize * group.count) - 1)
+	{
+		std::cout << "Renorm " << ((ransState2 * group.count) + symbolIdx) << std::endl;
+		compressedBlocks->push_back(ransState2 % blockSize);
+		ransState2 /= blockSize;
+		++count;
+		if (count > 100)
+		{
+			std::cout << "RANS STUCK IN LOOP?" << std::endl;
+			continue;
+		}
+	}
+
+	// add symbol to rANS state
+	uint64_t newState = ransState2 * group.count;
+	newState += symbolIdx;
+
+	std::cout << "State2: " << ransState2 << std::endl;
+	*/
+	
+	prob_t pdf = (probabilityRange - 1) / group.count;
+	assert(pdf > 0);
+	prob_t cdf = pdf * symbolIdx;
+	assert(cdf < probabilityRange);
+	// renormalize if necessary
+	// add symbol to rANS state
+	state_t newState = ransState / pdf;
+	newState *= probabilityRange;
+	newState += cdf;
+	newState += ransState % pdf;
+	// push the bytes the decoder will need to read after decoding our value
+	while (newState > stateMax)
+	{
+		compressedBlocks->push_back(ransState % blockSize);
+		//std::cout << "push " << int(compressedBlocks->back()) << std::endl;
+		ransState /= blockSize;
+		newState = ransState / pdf;
+		newState *= probabilityRange;
+		newState += cdf;
+		newState += ransState % pdf;
+		++count;
+		if (count > 100)
+		{
+			std::cout << "RANS STUCK IN LOOP?" << std::endl;
+			continue;
+		}
+	}
+
+	assert(count != 3);
+	
+	/*
+	// renormalize if necessary
+	if (newState > stateMax)
+	{
+		compressedBlocks->push_back(ransState2 % blockSize);
+		std::cout << "push " << int(compressedBlocks->back()) << std::endl;
+		ransState2 /= blockSize;
+		AddSubIdx(symbol, group);
+		return;
+	}
+
+	std::cout << "State2: " << ransState2 << std::endl;
+	*/
+	ransState = newState;
+	//std::cout << "State3: " << newState << " " << stateMin  << " " << stateMax << std::endl;
+
+	// current state is the state our value will be decoded at
+	//assert(ransState2 >= group.count);
+	assert(ransState >= stateMin);
+	assert(ransState <= stateMax);
+}
+
+// Encode symbol
+void RansState::AddSymbol(symbol_t symbol)
+{
+	// Write sub-index
+	RansGroup group = ransTable->GetSymbolGroup(symbol);
+
 	if (group.start != 0 && group.count > 1)
 	{
+		AddSubIdx(symbol, group);
+		// TODO fix
+		/*
 		// find symbol idx in group
-		uint16_t symbolIdx = ransTable->GetSymbolIdxInGroup(group, symbol);
+		symidx_t symbolIdx = ransTable->GetSymbolSubIdx(symbol);
+		std::cout << "adding symbol idx " << symbol << " " << symbolIdx << std::endl;
 
 		// double-check
 		if (ransTable->GetSymbolEntryFromGroup(group, symbolIdx) != symbol)
 		{
-			std::cout << group.cdf << " " << group.pdf << " " << entry.cdf << std::endl;
+			std::cout << group.cdf << " " << group.pdf << std::endl;
 			std::cout << "Bad symbol encode " << symbol << " " << symbolIdx << std::endl;
 			return;
 		}
@@ -381,6 +846,8 @@ void RansState::AddSymbol(uint16_t symbol)
 		// add symbol to rANS state
 		uint64_t newState = ransState * group.count;
 		newState += symbolIdx;
+
+		std::cout << "State1: " << newState << std::endl;
 
 		// renormalize if necessary
 		while (newState > stateMax)
@@ -392,14 +859,21 @@ void RansState::AddSymbol(uint16_t symbol)
 		}
 
 		ransState = newState;
+		std::cout << "State2: " << newState << std::endl;
+		*/
 	}
 
+	//std::cout << "adding group " << symbol << " " << group.count << " " << group.start << " " << group.pdf << " " << group.cdf << " " << probabilityRange << std::endl;
+	AddGroup(group);
+	/*
 	// write group (also handles fast path)
 	// add symbol to rANS state
 	uint64_t newState = ransState / group.pdf;
 	newState *= probabilityRange;
 	newState += group.cdf;
 	newState += ransState % group.pdf;
+
+	std::cout << "State3: " << newState << std::endl;	
 
 	// renormalize if necessary
 	while (newState > stateMax)
@@ -412,26 +886,20 @@ void RansState::AddSymbol(uint16_t symbol)
 		newState += ransState % group.pdf;
 	}
 
+	std::cout << "State4: " << newState << std::endl;
 	ransState = newState;
+	*/
 }
 
 // Decode symbol
-uint16_t RansState::ReadSymbol()
+symbol_t RansState::ReadSymbol()
 {
-	// feed data into state as needed
-	while (ransState < stateMin)
-	{
-		ransState *= blockSize;
-		ransState += compressedBlocks->back();
-		compressedBlocks->pop_back();
-	}
-
 	// read group
 	// TODO this can be a bitwise AND
-	uint64_t cumulativeProb = ransState % probabilityRange;
+	prob_t cumulativeProb = ransState % probabilityRange;
 	RansGroup group = ransTable->GetSymbolGroupFromFreq(cumulativeProb);
 	// TODO can use bit shift
-	uint64_t newState = ransState / probabilityRange;
+	state_t newState = ransState / probabilityRange;
 	newState = newState * group.pdf;
 	// TODO can use bitwise AND
 	newState += ransState % probabilityRange;
@@ -439,6 +907,18 @@ uint16_t RansState::ReadSymbol()
 
 	ransState = newState;
 
+	//std::cout << "State2: " << ransState << std::endl;
+
+	//std::cout << "read group " << group.count << " " << group.start << " " << " " << group.pdf << " " << group.cdf << " " << probabilityRange << std::endl;
+
+	// feed data into state as needed
+	while (ransState < stateMin)
+	{
+		//std::cout << "pop " << int(compressedBlocks->back()) << std::endl;
+		ransState *= blockSize;
+		ransState += compressedBlocks->back();
+		compressedBlocks->pop_back();
+	}
 	// fast path for values before the pivot
 	if (group.start == 0)
 		// symbol is smuggled in count to skip a layer of indirection
@@ -446,33 +926,68 @@ uint16_t RansState::ReadSymbol()
 
 	// if there's only 1 item in the group, no need to read
 	if (group.count == 1)
-		return ransTable->GetSymbolEntryFromGroup(group, 0);
+		return ransTable->GetSymbolFromGroup(group, 0);
 
-	// multiple symbols in group - need to get sub-index
+	// read index
+	prob_t pdf = (probabilityRange - 1) / group.count;
+	assert(pdf > 0);
+	// TODO this can be a bitwise AND
+	prob_t readCDF = ransState % probabilityRange;
+	symidx_t index = readCDF / pdf;
+	prob_t cdf = pdf * index;
+	assert(cdf < probabilityRange);
+	// TODO can use bit shift
+	newState = ransState / probabilityRange;
+	newState = newState * pdf;
+	// TODO can use bitwise AND
+	newState += ransState % probabilityRange;
+	newState -= cdf;
+	symbol_t symbol = ransTable->GetSymbolFromGroup(group, index);
+
+	ransState = newState;
+
+	/*
+	// feed data into state as needed
+	while (ransState2 < group.count)
+	{
+		std::cout << "pop " << int(compressedBlocks->back()) << std::endl;
+		ransState2 *= blockSize;
+		ransState2 += compressedBlocks->back();
+		compressedBlocks->pop_back();
+	}
+
+	//std::cout << "State3: " << ransState << std::endl;
+
+	// read sub-index
+	// get sub index (all symbols have PDF=1/group.count)
+	cumulativeProb = ransState2 % group.count;
+	symbol_t symbol = ransTable->GetSymbolEntryFromGroup(group, cumulativeProb);
+	newState = ransState2 / group.count;
+	// PDF is 1
+	//newState = newState * entry.pdf;
+	// these values are identical because PDF is 1
+	//newState += ransState % group.count;
+	//newState -= cumulativeProb;
+	*/
+
+	//std::cout << "read sub-group " << symbol << " " << cumulativeProb << std::endl;
+
+	ransState = newState;
+
 	// feed data into state as needed
 	while (ransState < stateMin)
 	{
+		//std::cout << "pop " << int(compressedBlocks->back()) << std::endl;
 		ransState *= blockSize;
 		ransState += compressedBlocks->back();
 		compressedBlocks->pop_back();
 	}
-
-	// read sub-index
-	// get sub index (all symbols have PDF=1/group.count)
-	cumulativeProb = ransState % group.count;
-	uint16_t symbol = ransTable->GetSymbolEntryFromGroup(group, cumulativeProb);
-	newState = ransState / group.count;
-	// PDF is 1
-	//newState = newState * entry.pdf;
-	newState += ransState % group.count;
-	newState -= cumulativeProb;
-
-	ransState = newState;
+	//std::cout << "State5: " << ransState2 << std::endl;
 
 	return symbol;
 }
 
-const std::vector<uint8_t> RansState::GetCompressedBlocks()
+const std::vector<block_t> RansState::GetCompressedBlocks()
 {
 	return compressedBlocks->get_vec();
 }
@@ -480,18 +995,16 @@ const std::vector<uint8_t> RansState::GetCompressedBlocks()
 
 uint64_t RansState::GetRansState()
 {
-	return ransState;
+	return ransState;// +(ransState2 << 32);
 }
 
 
 bool RansState::HasData()
 {
-#ifdef DEBUG
+	if (ransState != stateMin)
+		return true;
 	// this is now slower
 	if (compressedBlocks->size() > 0)
-		return true;
-#endif
-	if (ransState != stateMin)
 		return true;
 	return false;
 }

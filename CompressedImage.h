@@ -1,11 +1,8 @@
 #pragma once
 #include <vector>
-#include <memory>
-#include <map>
 
-#include "RansEncode.h"
 #include "CompressedImageBlock.h"
-#include "Serialize.h"
+#include "Precision.h"
 
 struct CompressedImageHeader
 {
@@ -40,18 +37,18 @@ public:
     // TODO remove
     CompressedImage() {};
     // open + full decode
-    CompressedImage(const std::vector<uint16_t>& values, size_t width, size_t height, size_t blockSize);
+    CompressedImage(const std::vector<symbol_t>& values, size_t width, size_t height, size_t blockSize);
     // loads whole file
     static std::shared_ptr<CompressedImage> Deserialize(ByteIterator& bytes);
     // Opens for streaming
     static std::shared_ptr<CompressedImage> OpenStream(std::string filename);
     std::vector<uint8_t> Serialize();
-    std::vector<uint16_t> GetBottomLevelPixels();
+    std::vector<symbol_t> GetBottomLevelPixels();
 
     // returns the level each block is decoded at
     std::vector<uint8_t> GetBlockLevels();
 
-    uint16_t GetPixel(size_t x, size_t y);
+    symbol_t GetPixel(size_t x, size_t y);
 
     uint32_t GetWidth() const;
     uint32_t GetHeight() const;

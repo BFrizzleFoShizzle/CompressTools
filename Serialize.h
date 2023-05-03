@@ -2,10 +2,10 @@
 
 #include <vector>
 #include <string>
-#include <streambuf>
 #include <iostream>
 #include <fstream>
 #include "Release_Assert.h"
+#include "Precision.h"
 
 // std::hash is garbage
 size_t HashVec(std::vector<uint16_t> const& vec);
@@ -55,6 +55,7 @@ public:
     virtual void operator-=(size_t count) = 0;
     // clone stream at position
     virtual std::shared_ptr<Stream<T>> clone() = 0;
+    virtual Stream<symbol_t>* castToBlocks() = 0;
 };
 
 template<typename T>
@@ -95,6 +96,11 @@ public:
     std::shared_ptr<Stream<T>> clone() override
     {
         return std::shared_ptr<Stream<T>>(new VectorIOStream<T>(input, position));
+    }
+    // clone stream at position
+    Stream<symbol_t>* castToBlocks()
+    {
+        return new VectorIOStream<symbol_t>(input, position);
     }
 private:
     const std::vector<uint8_t>* input;
@@ -143,31 +149,55 @@ public:
     {
         return std::shared_ptr<Stream<T>>(new FileIOStream<T>(bytes, position));
     }
+    // clone stream at position
+    Stream<symbol_t>* castToBlocks()
+    {
+        return new FileIOStream<symbol_t>(bytes, position);
+    }
 private:
     FastFileStream* bytes;
     size_t position;
 };
 
 
-typedef Stream<uint8_t> ByteIterator;
-typedef std::shared_ptr<ByteIterator> ByteIteratorPtr;
+template <typename T>
+using Iterator = Stream<T>;
+template <typename T>
+using IteratorPtr = std::shared_ptr<Stream<T>>;
+typedef Iterator<uint8_t> ByteIterator;
+typedef IteratorPtr<uint8_t> ByteIteratorPtr;
 
-ByteIteratorPtr ByteStreamFromVector(const std::vector<uint8_t>* input);
-ByteIteratorPtr ByteStreamFromFile(FastFileStream* bytes);
-ByteIteratorPtr ByteStreamFromFile(FastFileStream* bytes, size_t position);
-
-template<typename T>
-T ReadValue(ByteIterator &inputBytes)
+template <typename T>
+IteratorPtr<T> StreamFromVector(const std::vector<uint8_t>* input)
 {
+    return IteratorPtr<T>(new VectorIOStream<T>(input));
+}
+
+template <typename T>
+IteratorPtr<T> StreamFromFile(FastFileStream* bytes)
+{
+    return IteratorPtr<T>(new FileIOStream<T>(bytes));
+}
+
+template <typename T>
+IteratorPtr<T> StreamFromFile(FastFileStream* bytes, size_t position)
+{
+    return IteratorPtr<T>(new FileIOStream<T>(bytes, position));
+}
+
+template<typename T, typename BT>
+T ReadValue(Iterator<BT> &input)
+{
+    assert(sizeof(T) % sizeof(BT) == 0);
     T value;
-    uint8_t* valueBytes = reinterpret_cast<uint8_t*>(&value);
+    BT* valueBlocks = reinterpret_cast<BT*>(&value);
 
     // basically memcpy
-    for (size_t bytePos = 0; bytePos < sizeof(value); ++bytePos)
+    for (size_t blockPos = 0; blockPos < (sizeof(value) / sizeof(BT)); ++blockPos)
     {
-        *valueBytes = *inputBytes;
-        ++valueBytes;
-        ++inputBytes;
+        *valueBlocks = *input;
+        ++valueBlocks;
+        ++input;
     }
 
     return value;
@@ -253,7 +283,7 @@ public:
     virtual void pop_back() = 0;
     virtual size_t size() = 0;
     virtual T back() = 0;
-    virtual std::vector<uint8_t> get_vec() = 0;
+    virtual std::vector<T> get_vec() = 0;
     virtual std::shared_ptr<Stream<T>> get_stream() = 0;
 };
 
@@ -263,6 +293,9 @@ template<typename T>
 class VectorVectorStream : public VectorStream<T>
 {
 public:
+    VectorVectorStream(std::vector<T>& vector)
+        : vector(vector) {};
+    VectorVectorStream() {};
     void push_back(T val) override
     {
         vector.push_back(val);
@@ -279,13 +312,14 @@ public:
     {
         return vector.back();
     }
-    std::vector<uint8_t> get_vec() override
+    std::vector<T> get_vec() override
     {
         return vector;
     }
     std::shared_ptr<Stream<T>> get_stream() override
     {
-        return ByteStreamFromVector(&vector);
+        assert(false);
+        return std::shared_ptr<Stream<T>>();
     }
 private:
     std::vector<T> vector;
@@ -320,11 +354,11 @@ public:
     {
         return **backPtr;
     }
-    std::vector<uint8_t> get_vec() override
+    std::vector<T> get_vec() override
     {
         // TODO
         assert(false);
-        return std::vector<uint8_t>();
+        return std::vector<T>();
     }
     std::shared_ptr<Stream<T>> get_stream() override
     {
@@ -338,15 +372,15 @@ public:
 // swap back and front
 // has *EXTREME* late binding fo dat mad perf gainz
 template<typename T>
-class ReverseByteVectorStream : public VectorStream<T>
+class ReverseVectorStream : public VectorStream<T>
 {
 public:
-    ReverseByteVectorStream(ByteIterator& bytes, size_t count)
+    ReverseVectorStream(Iterator<T>& bytes, size_t count)
         : count(count)
     {
         basePtr = bytes.clone();
     }
-    ReverseByteVectorStream(ByteIterator& bytes)
+    ReverseVectorStream(Iterator<T>& bytes)
         : count(-1)
     {
         basePtr = bytes.clone();
@@ -372,11 +406,11 @@ public:
         init();
         return **basePtr;
     }
-    std::vector<uint8_t> get_vec() override
+    std::vector<T> get_vec() override
     {
         // TODO
         assert(false);
-        return std::vector<uint8_t>();
+        return std::vector<T>();
     }
     std::shared_ptr<Stream<T>> get_stream() override
     {
@@ -393,13 +427,13 @@ private:
             count = vectorHeader.count;
         }
     }
-    ByteIteratorPtr basePtr;
+    IteratorPtr<T> basePtr;
     size_t count;
     bool initialized;
 };
 
 template<typename T>
-std::shared_ptr<VectorStream<T>> StreamVector(ByteIterator& bytes)
+std::shared_ptr<VectorStream<T>> StreamVector(Iterator<T>& bytes)
 {
     // read header
     VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(bytes);
@@ -415,27 +449,26 @@ std::shared_ptr<VectorStream<T>> StreamVector(ByteIterator& bytes)
 
 // WARNING: if consumeImmediate = true, does NO READS and DOES NOT move ptr forward!
 template<typename T>
-std::shared_ptr<VectorStream<T>> ReverseStreamVector(ByteIterator& bytes, bool consumeImmediate = false)
+std::shared_ptr<VectorStream<T>> ReverseStreamVector(Iterator<T>& values, bool consumeImmediate = false)
 {
     std::shared_ptr<VectorStream<T>> out;
 
     if (consumeImmediate)
     {
         // read header
-        VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(bytes);
+        VectorHeader<T> vectorHeader = ReadValue<VectorHeader<T>>(values);
 
         // create stream
-        out = std::shared_ptr<VectorStream<T>>(new ReverseByteVectorStream<T>(bytes, vectorHeader.count));
+        out = std::shared_ptr<VectorStream<T>>(new ReverseVectorStream<T>(values, vectorHeader.count));
 
         // seek to end of stream
-        bytes += vectorHeader.count * sizeof(T);
+        values += vectorHeader.count * sizeof(T);
     }
     else
     {
         // create stream (it reads it's own header)
-        out = std::shared_ptr<VectorStream<T>>(new ReverseByteVectorStream<T>(bytes));
+        out = std::shared_ptr<VectorStream<T>>(new ReverseVectorStream<T>(values));
     }
-
 
     return out;
 }

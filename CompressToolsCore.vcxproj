@@ -96,6 +96,7 @@
   <ItemGroup>
     <ClInclude Include="CompressedImage.h" />
     <ClInclude Include="CompressedImageBlock.h" />
+    <ClInclude Include="Precision.h" />
     <ClInclude Include="RansEncode.h" />
     <ClInclude Include="Release_Assert.h" />
     <ClInclude Include="Serialize.h" />

@@ -1,5 +1,4 @@
 #include "CompressedImageBlock.h"
-#include "Serialize.h"
 
 #include <iostream>
 #include "Release_Assert.h"
@@ -11,10 +10,10 @@ struct CompressedImageBlockHeader::BlockHeaderHeader
     uint32_t blockPos;
 
     // rANS
-    uint32_t finalRansState;
+    uint64_t finalRansState;
 };
 
-CompressedImageBlock::CompressedImageBlock(std::vector<uint16_t> pixelVals, uint32_t width, uint32_t height)
+CompressedImageBlock::CompressedImageBlock(std::vector<symbol_t> pixelVals, uint32_t width, uint32_t height)
 {
     encodeWaveletPyramidBottom = std::make_shared<WaveletEncodeLayer>(pixelVals, width, height);
     // get top layer
@@ -29,12 +28,12 @@ struct BlockBodyHeader
     uint32_t hash;
 };
 */
-CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, ByteIterator &bytes, std::shared_ptr<RansTable> symbolTable)
+CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, Iterator<block_t> &blocks, std::shared_ptr<RansTable> symbolTable)
     : header(header)
 {
     //BlockBodyHeader bodyHeader = ReadValue<BlockBodyHeader>(bytes);
 
-    std::shared_ptr<VectorStream<uint8_t>> ransByteStream = ReverseStreamVector<uint8_t>(bytes, false);
+    std::shared_ptr<VectorStream<block_t>> ransByteStream = ReverseStreamVector<block_t>(blocks, false);
 
     if (header.finalRansState == 0)
     {
@@ -44,7 +43,7 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, By
     }
 
     //std::cout << rANSBytes.size() << " Bytes read" << std::endl;
-    ransState = RansState(ransByteStream, header.finalRansState, 24, symbolTable, 8);
+    ransState = RansState(ransByteStream, header.finalRansState, PROBABILITY_RES, symbolTable, BLOCK_SIZE);
 }
 
 uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
@@ -82,7 +81,7 @@ uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
         size_t waveletsCount = rootSize.GetWaveletCount();
 
         // read wavelets
-        std::vector<uint16_t> rootWavelets;
+        std::vector<symbol_t> rootWavelets;
         while (ransState.HasData() && rootWavelets.size() < waveletsCount)
             rootWavelets.emplace_back(ransState.ReadSymbol());
         
@@ -116,7 +115,8 @@ uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
         size_t waveletsCount = newLayerSize.GetWaveletCount();
         
         // read wavelets
-        std::vector<uint16_t> wavelets;
+        std::vector<symbol_t> wavelets;
+        wavelets.reserve(waveletsCount);
         while (ransState.HasData() && wavelets.size() < waveletsCount)
             wavelets.emplace_back(ransState.ReadSymbol());
 
@@ -136,7 +136,7 @@ uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
     return decodedLevel;
 }
 
-std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
+std::vector<symbol_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
 {
     uint32_t currLevel = DecodeToLevel(level);
     
@@ -153,7 +153,7 @@ std::vector<uint16_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
     }
 }
 
-std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
+std::vector<symbol_t> CompressedImageBlock::GetWaveletValues()
 {
     // Get wavelet layers
     std::shared_ptr<WaveletEncodeLayer> topLayer = encodeWaveletPyramidBottom;
@@ -169,10 +169,10 @@ std::vector<uint16_t> CompressedImageBlock::GetWaveletValues()
     std::reverse(waveletLayers.begin(), waveletLayers.end());
 
     // Combine wavelet vector
-    std::vector<uint16_t> blockWavelets;
+    std::vector<symbol_t> blockWavelets;
     for (auto waveletLayer : waveletLayers)
     {
-        const std::vector<uint16_t>& layerWavelets = waveletLayer->GetWavelets();
+        const std::vector<symbol_t>& layerWavelets = waveletLayer->GetWavelets();
         blockWavelets.insert(blockWavelets.end(), layerWavelets.begin(), layerWavelets.end());
     }
 
@@ -188,28 +188,29 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
     //outputBytes.resize(outputBytes.size());
 
     // Get wavelets
-    std::vector<uint16_t> blockWavelets = GetWaveletValues();
+    std::vector<symbol_t> blockWavelets = GetWaveletValues();
 
     // TODO error-checking
     size_t waveletsHash = HashVec(blockWavelets);
-    // rANS encode - 24-bit probability, 8-bit blocks
-    std::shared_ptr<RansState> waveletRansState = std::make_shared<RansState>(24, globalSymbolTable, 8);
+    // rANS encode - 16-bit probability, 16-bit blocks
+    std::shared_ptr<RansState> waveletRansState = std::make_shared<RansState>(PROBABILITY_RES, globalSymbolTable, BLOCK_SIZE);
     // rANS decodes backwards
     std::reverse(blockWavelets.begin(), blockWavelets.end());
+
     //std::cout << "Starting rANS encode..." << std::endl;
     for (auto value : blockWavelets)
         waveletRansState->AddSymbol(value);
 
     size_t finalRansState = waveletRansState->GetRansState();
 
-    if (finalRansState > std::numeric_limits<uint32_t>::max())
-        std::cerr << "Final rANS state is above max!" << std::endl;
+    //if (finalRansState > std::numeric_limits<uint32_t>::max())
+    //    std::cerr << "Final rANS state is above max!" << std::endl;
 
     header.finalRansState = waveletRansState->GetRansState();
     //std::cout << "finsihed rANS encode..." << std::endl;
 
     // write rANS encoded wavelets
-    std::vector<uint8_t> ransEncondedWavelets = waveletRansState->GetCompressedBlocks();
+    std::vector<block_t> ransEncondedWavelets = waveletRansState->GetCompressedBlocks();
     // reverse
     std::reverse(ransEncondedWavelets.begin(), ransEncondedWavelets.end());
     WriteVector(outputBytes, ransEncondedWavelets);
@@ -220,12 +221,12 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
     //memcpy(&outputBytes[headerPos], &header, sizeof(header));
 }
 
-std::vector<uint16_t> CompressedImageBlock::GetBottomLevelPixels()
+std::vector<symbol_t> CompressedImageBlock::GetBottomLevelPixels()
 {
     return GetLevelPixels(0);
 }
 
-uint16_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
+symbol_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
 {
     // level of parent values
     WaveletLayerSize rootSize = WaveletLayerSize(header.width, header.height);
@@ -337,7 +338,7 @@ uint32_t CompressedImageBlock::GetLevel()
     return decodedLevel;
 }
 
-std::vector<uint16_t> CompressedImageBlock::GetParentVals()
+std::vector<symbol_t> CompressedImageBlock::GetParentVals()
 {
     return header.GetParentVals();
 }
@@ -371,7 +372,7 @@ void CompressedImageBlockHeader::Write(std::vector<uint8_t>& outputBytes)
     WriteValue(outputBytes, headerTop);
 }
 
-CompressedImageBlockHeader CompressedImageBlockHeader::Read(ByteIterator &bytes, std::vector<uint16_t> parentVals, uint32_t width, uint32_t height)
+CompressedImageBlockHeader CompressedImageBlockHeader::Read(ByteIterator &bytes, std::vector<symbol_t> parentVals, uint32_t width, uint32_t height)
 {
     BlockHeaderHeader headerTop = ReadValue<BlockHeaderHeader>(bytes);
     return CompressedImageBlockHeader(headerTop, width, height, parentVals);
@@ -382,13 +383,13 @@ CompressedImageBlockHeader CompressedImageBlock::GetHeader()
     return header;
 }
 
-CompressedImageBlockHeader::CompressedImageBlockHeader(BlockHeaderHeader header, uint32_t width, uint32_t height, std::vector<uint16_t> parentVals)
+CompressedImageBlockHeader::CompressedImageBlockHeader(BlockHeaderHeader header, uint32_t width, uint32_t height, std::vector<symbol_t> parentVals)
     : width(width), height(height), blockPos(header.blockPos), finalRansState(header.finalRansState), parentVals(parentVals)
 {
 
 }
 
-CompressedImageBlockHeader::CompressedImageBlockHeader(std::vector<uint16_t> parentVals, uint32_t width, uint32_t height)
+CompressedImageBlockHeader::CompressedImageBlockHeader(std::vector<symbol_t> parentVals, uint32_t width, uint32_t height)
     : parentVals(parentVals), width(width), height(height), blockPos(-1), finalRansState(0)
 {
     
@@ -417,7 +418,7 @@ size_t CompressedImageBlockHeader::GetMemoryFootprint() const
     return sizeof(CompressedImageBlockHeader) + vectorMemoryUsage;
 }
 
-const std::vector<uint16_t>& CompressedImageBlockHeader::GetParentVals()
+const std::vector<symbol_t>& CompressedImageBlockHeader::GetParentVals()
 {
     return parentVals;
 }

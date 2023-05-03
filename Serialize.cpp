@@ -10,21 +10,6 @@ std::size_t HashVec(std::vector<uint16_t> const& vec)
     return seed;
 }
 
-ByteIteratorPtr ByteStreamFromVector(const std::vector<uint8_t>* input)
-{
-    return std::shared_ptr<Stream<uint8_t>>(new VectorIOStream<uint8_t>(input));
-}
-
-ByteIteratorPtr ByteStreamFromFile(FastFileStream* bytes)
-{
-    return std::shared_ptr<Stream<uint8_t>>(new FileIOStream<uint8_t>(bytes));
-}
-
-ByteIteratorPtr ByteStreamFromFile(FastFileStream* bytes, size_t position)
-{
-    return std::shared_ptr<Stream<uint8_t>>(new FileIOStream<uint8_t>(bytes, position));
-}
-
 FastFileStream::FastFileStream(std::string filename)
     : fileStream(filename, std::ios::binary), position(0)
 {
