@@ -5,6 +5,8 @@
 #include "Precision.h"
 #include "Serialize.h"
 
+static constexpr size_t PROBABILITY_RES = 16;
+
 // Ported from my old Python implementation
 
 typedef std::unordered_map<symbol_t, count_t> SymbolCountDict;
@@ -135,13 +137,13 @@ class RansState
 public:
 	RansState();
 	// rANS state - size of state = size of probability + size of output block
-	RansState(uint32_t probabilityRes, SymbolCountDict counts);
+	RansState(SymbolCountDict counts);
 	// fast constructor if rANS table is already generated
-	RansState(uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable);
+	RansState(std::shared_ptr<RansTable> symbolTable);
 	// TODO serialize whole thing?
-	RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, SymbolCountDict counts);
+	RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, SymbolCountDict counts);
 	// fast constructor if rANS table is already generated
-	RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, uint32_t probabilityRes, std::shared_ptr<RansTable> symbolTable);
+	RansState(std::shared_ptr<VectorStream<block_t>> compressedBlocks, state_t ransState, std::shared_ptr<RansTable> symbolTable);
 
 	// Encode symbol
 	void AddSymbol(symbol_t symbol);
@@ -160,9 +162,11 @@ private:
 	// TODO used to work around bad math
 	void AddGroup(RansGroup group);
 	void AddSubIdx(symbol_t symbol, RansGroup group);
-	count_t probabilityRange;
-	state_t stateMin;
-	state_t stateMax;
+	static constexpr uint64_t BLOCK_SIZE = 1ull << (8 * sizeof(block_t));
+	static constexpr state_t PROBABILITY_RANGE = 1 << PROBABILITY_RES;
+	static constexpr state_t STATE_MIN = PROBABILITY_RANGE;
+	static constexpr state_t STATE_MAX = (STATE_MIN * BLOCK_SIZE) - 1;
+	static_assert(STATE_MIN < STATE_MAX, "STATE_MIN larger than STATE_MAX");
 	state_t ransState;
 	std::shared_ptr<VectorStream<block_t>> compressedBlocks;
 	// so we can reuse one hunk of memory

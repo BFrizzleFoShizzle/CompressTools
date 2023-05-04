@@ -1,7 +1,5 @@
 #pragma once
 
-static constexpr size_t PROBABILITY_RES = 16;
-
 #include <vector>
 #include "WaveletEncodeLayer.h"
 #include "WaveletDecodeLayer.h"

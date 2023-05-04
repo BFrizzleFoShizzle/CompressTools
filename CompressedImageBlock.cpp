@@ -43,7 +43,7 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, It
     }
 
     //std::cout << rANSBytes.size() << " Bytes read" << std::endl;
-    ransState = RansState(ransByteStream, header.finalRansState, PROBABILITY_RES, symbolTable);
+    ransState = RansState(ransByteStream, header.finalRansState, symbolTable);
 }
 
 uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
@@ -192,8 +192,8 @@ void CompressedImageBlock::WriteBody(std::vector<uint8_t>& outputBytes, const st
 
     // TODO error-checking
     size_t waveletsHash = HashVec(blockWavelets);
-    // rANS encode - 16-bit probability, 16-bit blocks
-    std::shared_ptr<RansState> waveletRansState = std::make_shared<RansState>(PROBABILITY_RES, globalSymbolTable);
+    // rANS encode
+    std::shared_ptr<RansState> waveletRansState = std::make_shared<RansState>(globalSymbolTable);
     // rANS decodes backwards
     std::reverse(blockWavelets.begin(), blockWavelets.end());
 
