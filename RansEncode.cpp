@@ -1008,16 +1008,13 @@ void RansState::AddSymbol(symbol_t symbol)
 symbol_t RansState::ReadSymbol()
 {
 	// read group
-	// TODO this can be a bitwise AND
 	prob_t cumulativeProb = ransState % PROBABILITY_RANGE;
 	const group_packed_t group = ransTable->GetSymbolGroupFromFreq(cumulativeProb);
 	group_packed_t groupShifted = group;
-	// TODO can use bit shift
 	state_t newState = ransState / PROBABILITY_RANGE;
 	// TODO generate mask from prob_t
 	// groupShifted & 0xFFFF = PDF
 	newState = newState * (prob_t)groupShifted;
-	// TODO can use bitwise AND
 	newState += ransState % PROBABILITY_RANGE;
 	groupShifted = groupShifted >> 16;
 	// groupShifted & 0xFFFF = CDF
@@ -1068,15 +1065,12 @@ symbol_t RansState::ReadSymbol()
 	//assert(((groupShifted >> 16) & 0xFFFF) > 0);
 	prob_t pdf = (PROBABILITY_RANGE - 1) / (groupShifted >> 16);
 	assert(pdf > 0);
-	// TODO this can be a bitwise AND
 	prob_t readCDF = ransState % PROBABILITY_RANGE;
 	symidx_t index = readCDF / pdf;
 	prob_t cdf = pdf * index;
 	assert(cdf < PROBABILITY_RANGE);
-	// TODO can use bit shift
 	newState = ransState / PROBABILITY_RANGE;
 	newState = newState * pdf;
-	// TODO can use bitwise AND
 	newState += ransState % PROBABILITY_RANGE;
 	newState -= cdf;
 	symbol_t symbol = ransTable->GetSymbolFromGroup(group, index);
