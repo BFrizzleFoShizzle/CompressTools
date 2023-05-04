@@ -37,6 +37,8 @@ std::vector<SymbolPDF> EntropySortSymbols(const SymbolCountDict &dict)
 CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilityRes,
 	std::unordered_map<symbol_t, RansGroup>& symbolGroupsOut, std::unordered_map<symbol_t, symidx_t>& symbolSubIdxOut)
 {
+	assert(RansGroup(1, 2, 3, 4).Pack() == RansGroup(RansGroup(1, 2, 3, 4).Pack()).Pack());
+	assert(RansGroup(1, 2, 3, 4).Pack() == 0x0002000100040003ull);
 	size_t probabilityRange = 1 << probabilityRes;
 
 	uint64_t countsSum = 0;
@@ -470,7 +472,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 			assert(test1.start == group.start);
 			assert(test1.count == group.count);
 			symidx_t subIdx = symbolSubIdxOut[symbol];
-			assert(symbol == GetSymbol(test1, subIdx));
+			assert(symbol == GetSymbol(test1.Pack(), subIdx));
 		}
 		RansGroup test2 = GetSymbolGroup(group.cdf + group.pdf - 1);
 		assert(test2.pdf == group.pdf);
@@ -486,7 +488,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 			assert(test2.start == group.start);
 			assert(test2.count == group.count);
 			symidx_t subIdx = symbolSubIdxOut[symbol];
-			assert(symbol == GetSymbol(test2, subIdx));
+			assert(symbol == GetSymbol(test2.Pack(), subIdx));
 		}
 	}
 
@@ -540,12 +542,10 @@ CDFTable::CDFTable(const TableGroupList& groupList, uint32_t probabilityRes)
 	assert(groupCDFs.back() == 1 << probabilityRes || groupCDFs.back() == 65535);
 }
 
-RansGroup CDFTable::GetSymbolGroup(const prob_t symbolCDF)
+group_packed_t CDFTable::GetSymbolGroup(const prob_t symbolCDF)
 {
 	if (symbolCDF >= rawCDF)
-	{
-		 return RansGroup(-1, -1, groupCDFs.back() - rawCDF, rawCDF);
-	}
+		return 0xFFFFFFFF00000000ull | (((uint32_t)rawCDF) << 16) | (groupCDFs.back() - rawCDF);
 
 	// find matching group
 	const prob_t* __restrict groupCDFp = &groupCDFs.front();
@@ -596,7 +596,7 @@ RansGroup CDFTable::GetSymbolGroup(const prob_t symbolCDF)
 
 	// fast path for values before the pivot
 	if (groupStartCDF < pivotCDF)
-		return RansGroup(0, symbols[groupIdx], groupPDF, groupStartCDF);
+		return (((uint64_t)symbols[groupIdx]) << 48) | (((uint32_t)groupStartCDF) << 16) | groupPDF;
 
 	// calculate num. symbols
 	symidx_t nextGroupStart = symbols.size();
@@ -607,14 +607,14 @@ RansGroup CDFTable::GetSymbolGroup(const prob_t symbolCDF)
 		nextGroupStart = groupStarts[groupIdx + 1u];
 	const symidx_t groupCount = nextGroupStart - groupStarts[groupIdx];
 
-	return RansGroup(groupStarts[groupIdx], groupCount, groupPDF, groupStartCDF);
+	return (((uint64_t)groupCount) << 48) | (((uint64_t)groupStarts[groupIdx]) << 32) | (((uint32_t)groupStartCDF) << 16) | groupPDF;
 }
 
-symbol_t CDFTable::GetSymbol(RansGroup group, symidx_t symbolIndex)
+symbol_t CDFTable::GetSymbol(group_packed_t group, symidx_t symbolIndex)
 {
-	//if (group.start + symbolIndex >= symbols.size())
-	//	std::cout << "BAD INDEX " << group.start + symbolIndex << " " << symbols.size() << std::endl;
-	return symbols[group.start + symbolIndex];
+	//if ((group >> 32) & 0xFFFF) + symbolIndex >= symbols.size())
+	//	std::cout << "BAD INDEX " << (group >> 32) & 0xFFFF) + symbolIndex << " " << symbols.size() << std::endl;
+	return symbols[((group >> 32) & 0xFFFF) + symbolIndex];
 }
 
 TableGroupList CDFTable::GenerateGroupCDFs()
@@ -678,12 +678,12 @@ symidx_t RansTable::GetSymbolSubIdx(const symbol_t symbol)
 }
 
 // Cumulative probability to rANS group
-RansGroup RansTable::GetSymbolGroupFromFreq(const prob_t prob)
+group_packed_t RansTable::GetSymbolGroupFromFreq(const prob_t prob)
 {
 	return cdfTable.GetSymbolGroup(prob);
 }
 
-symbol_t RansTable::GetSymbolFromGroup(const RansGroup group, const symidx_t subIndex)
+symbol_t RansTable::GetSymbolFromGroup(const group_packed_t group, const symidx_t subIndex)
 {
 	return cdfTable.GetSymbol(group, subIndex);
 }
@@ -835,7 +835,7 @@ void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
 	//std::cout << "adding symbol idx " << symbol << " " << symbolIdx << " " << group.count << std::endl;
 
 	// double-check
-	if (ransTable->GetSymbolFromGroup(group, symbolIdx) != symbol)
+	if (ransTable->GetSymbolFromGroup(group.Pack(), symbolIdx) != symbol)
 	{
 		std::cout << group.cdf << " " << group.pdf << std::endl;
 		std::cout << "Bad symbol encode " << symbol << " " << symbolIdx << std::endl;
@@ -1021,13 +1021,18 @@ symbol_t RansState::ReadSymbol()
 	// read group
 	// TODO this can be a bitwise AND
 	prob_t cumulativeProb = ransState % probabilityRange;
-	const RansGroup group = ransTable->GetSymbolGroupFromFreq(cumulativeProb);
+	const group_packed_t group = ransTable->GetSymbolGroupFromFreq(cumulativeProb);
+	group_packed_t groupShifted = group;
 	// TODO can use bit shift
 	state_t newState = ransState / probabilityRange;
-	newState = newState * group.pdf;
+	// groupShifted & 0xFFFF = PDF
+	newState = newState * (prob_t)groupShifted;
 	// TODO can use bitwise AND
 	newState += ransState % probabilityRange;
-	newState -= group.cdf;
+	groupShifted = groupShifted >> 16;
+	// groupShifted & 0xFFFF = CDF
+	newState -= (prob_t)groupShifted;
+	groupShifted = groupShifted >> 16;
 
 	ransState = newState;
 
@@ -1045,7 +1050,8 @@ symbol_t RansState::ReadSymbol()
 	}
 
 	// raw symbols
-	if (group.start == (group_t)-1)
+	// groupShifted & 0xFFFF = start
+	if ((group_t)groupShifted == (group_t)-1)
 	{
 		symbol_t symbol = compressedBlocks->back();
 		compressedBlocks->pop_back();
@@ -1053,9 +1059,11 @@ symbol_t RansState::ReadSymbol()
 	}
 
 	// fast path for values before the pivot
-	if (group.start == 0)
+	// groupShifted & 0xFFFF = start
+	if ((group_t)groupShifted == 0)
 		// symbol is smuggled in count to skip a layer of indirection
-		return group.count;
+		// groupShifted & 0xFFFF = count
+		return (groupShifted >> 16);
 
 	// if there's only 1 item in the group, no need to read
 	// this shouldn't trigger anymore
@@ -1066,7 +1074,9 @@ symbol_t RansState::ReadSymbol()
 		*/
 
 	// read index
-	prob_t pdf = (probabilityRange - 1) / group.count;
+	// (groupShifted >> 16) & 0xFFFF = count
+	//assert(((groupShifted >> 16) & 0xFFFF) > 0);
+	prob_t pdf = (probabilityRange - 1) / (groupShifted >> 16);
 	assert(pdf > 0);
 	// TODO this can be a bitwise AND
 	prob_t readCDF = ransState % probabilityRange;

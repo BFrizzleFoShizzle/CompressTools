@@ -29,6 +29,17 @@ struct SymbolPDF
 
 std::vector<SymbolPDF> EntropySortSymbols(const SymbolCountDict &dict);
 
+// GetSymbolGroup doesn't get inlined, this hack at least makes it return in a register
+// group_packed_t & 0xFFFF = pdf
+// (group_packed_t >> 16) & 0xFFFF = cdf
+// (group_packed_t >> 32) & 0xFFFF = start
+// (group_packed_t >> 48) & 0xFFFF = count
+// ^ the above matches read order
+typedef uint64_t group_packed_t;
+static_assert(sizeof(group_packed_t) <= (sizeof(symidx_t) + sizeof(prob_t)) * 2, "rANS group doesn't fit in group_packed_t");
+// TODO fix this
+static_assert((sizeof(symidx_t) + sizeof(prob_t)) * 2 == 8, "group_packed_t needs updating");
+
 // represents a group of symbols with the same count
 class RansGroup
 {
@@ -39,6 +50,15 @@ public:
 		: start(start), count(count), pdf(pdf), cdf(cdf)
 	{
 
+	}
+	RansGroup(group_packed_t group)
+		: count((group >> 48) & 0xFFFF), start((group >> 32) & 0xFFFF), cdf((group >> 16) & 0xFFFF), pdf(group & 0xFFFF)
+	{
+
+	}
+	group_packed_t Pack() const
+	{
+		return pdf | (((uint32_t)cdf) << 16) | (((uint64_t)start) << 32) | (((uint64_t)count) << 48);
 	}
 	symidx_t start;
 	symidx_t count;
@@ -58,9 +78,9 @@ public:
 	// decoding
 	CDFTable(const TableGroupList& groupList, uint32_t probabilityRes);
 
-	inline symbol_t GetSymbol(RansGroup group, symidx_t symbolIndex);
+	inline symbol_t GetSymbol(group_packed_t group, symidx_t symbolIndex);
 	symidx_t GetSymbolSubIdx(RansGroup group, symbol_t symbol);
-	inline RansGroup GetSymbolGroup(const prob_t symbolCDF);
+	inline group_packed_t GetSymbolGroup(const prob_t symbolCDF);
 	// used for writing to disk
 	// [group](PDF, symbols[])
 	TableGroupList GenerateGroupCDFs();
@@ -92,8 +112,9 @@ public:
 
 	inline RansGroup GetSymbolGroup(const symbol_t symbol);
 	inline symidx_t GetSymbolSubIdx(const symbol_t symbol);
-	inline RansGroup GetSymbolGroupFromFreq(const prob_t prob);
-	inline symbol_t GetSymbolFromGroup(const RansGroup group, const symidx_t subIndex);
+	// this doesn't get inlined - we return an int so it at least returns in a register
+	inline group_packed_t GetSymbolGroupFromFreq(const prob_t prob);
+	inline symbol_t GetSymbolFromGroup(const group_packed_t group, const symidx_t subIndex);
 
 	// used for writing to disk
 	// [group](PDF, symbols[])
