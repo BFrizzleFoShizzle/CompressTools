@@ -456,8 +456,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 		assert(group.cdf < rawCDF);
 
 		// check group CDF lookup
-		RansGroup test1;
-		GetSymbolGroup(group.cdf, test1);
+		RansGroup test1 = GetSymbolGroup(group.cdf);
 		assert(test1.pdf == group.pdf);
 		assert(test1.cdf == group.cdf);
 		// test output
@@ -473,8 +472,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 			symidx_t subIdx = symbolSubIdxOut[symbol];
 			assert(symbol == GetSymbol(test1, subIdx));
 		}
-		RansGroup test2;
-		GetSymbolGroup(group.cdf + group.pdf - 1, test2);
+		RansGroup test2 = GetSymbolGroup(group.cdf + group.pdf - 1);
 		assert(test2.pdf == group.pdf);
 		assert(test2.cdf == group.cdf);
 		// test output
@@ -542,14 +540,11 @@ CDFTable::CDFTable(const TableGroupList& groupList, uint32_t probabilityRes)
 	assert(groupCDFs.back() == 1 << probabilityRes || groupCDFs.back() == 65535);
 }
 
-void CDFTable::GetSymbolGroup(prob_t symbolCDF, RansGroup& out)
+RansGroup CDFTable::GetSymbolGroup(const prob_t symbolCDF)
 {
 	if (symbolCDF >= rawCDF)
 	{
-		out.start = -1;
-		out.pdf = (groupCDFs.back() - rawCDF);
-		out.cdf = rawCDF;
-		return;
+		 return RansGroup(-1, -1, groupCDFs.back() - rawCDF, rawCDF);
 	}
 
 	// find matching group
@@ -601,13 +596,7 @@ void CDFTable::GetSymbolGroup(prob_t symbolCDF, RansGroup& out)
 
 	// fast path for values before the pivot
 	if (groupStartCDF < pivotCDF)
-	{
-		out.start = 0;
-		out.count = symbols[groupIdx];
-		out.pdf = groupPDF;
-		out.cdf = groupStartCDF;
-		return;
-	}
+		return RansGroup(0, symbols[groupIdx], groupPDF, groupStartCDF);
 
 	// calculate num. symbols
 	symidx_t nextGroupStart = symbols.size();
@@ -618,10 +607,7 @@ void CDFTable::GetSymbolGroup(prob_t symbolCDF, RansGroup& out)
 		nextGroupStart = groupStarts[groupIdx + 1u];
 	const symidx_t groupCount = nextGroupStart - groupStarts[groupIdx];
 
-	out.start = groupStarts[groupIdx];
-	out.count = groupCount;
-	out.pdf = groupPDF;
-	out.cdf = groupStartCDF;
+	return RansGroup(groupStarts[groupIdx], groupCount, groupPDF, groupStartCDF);
 }
 
 symbol_t CDFTable::GetSymbol(RansGroup group, symidx_t symbolIndex)
@@ -692,9 +678,9 @@ symidx_t RansTable::GetSymbolSubIdx(const symbol_t symbol)
 }
 
 // Cumulative probability to rANS group
-void RansTable::GetSymbolGroupFromFreq(const prob_t prob, RansGroup& out)
+RansGroup RansTable::GetSymbolGroupFromFreq(const prob_t prob)
 {
-	cdfTable.GetSymbolGroup(prob, out);
+	return cdfTable.GetSymbolGroup(prob);
 }
 
 symbol_t RansTable::GetSymbolFromGroup(const RansGroup group, const symidx_t subIndex)
@@ -1035,8 +1021,7 @@ symbol_t RansState::ReadSymbol()
 	// read group
 	// TODO this can be a bitwise AND
 	prob_t cumulativeProb = ransState % probabilityRange;
-	RansGroup group;
-	ransTable->GetSymbolGroupFromFreq(cumulativeProb, group);
+	const RansGroup group = ransTable->GetSymbolGroupFromFreq(cumulativeProb);
 	// TODO can use bit shift
 	state_t newState = ransState / probabilityRange;
 	newState = newState * group.pdf;

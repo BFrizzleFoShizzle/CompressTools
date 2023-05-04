@@ -29,22 +29,6 @@ struct SymbolPDF
 
 std::vector<SymbolPDF> EntropySortSymbols(const SymbolCountDict &dict);
 
-// 16Kx16K shouldn't overflow 32-bit counts
-class RansEntry
-{
-public:
-	RansEntry()
-	{};
-	RansEntry(symbol_t symbol, uint32_t cdf)
-		: symbol(symbol), cdf(cdf)
-	{
-
-	}
-	symbol_t symbol;
-	// used for probabilities
-	uint32_t cdf;
-};
-
 // represents a group of symbols with the same count
 class RansGroup
 {
@@ -58,9 +42,8 @@ public:
 	}
 	symidx_t start;
 	symidx_t count;
-	// used for probabilities
-	uint32_t pdf;
-	uint32_t cdf;
+	prob_t pdf;
+	prob_t cdf;
 };
 
 typedef std::vector<std::pair<prob_t, std::vector<symbol_t>>> TableGroupList;
@@ -77,7 +60,7 @@ public:
 
 	inline symbol_t GetSymbol(RansGroup group, symidx_t symbolIndex);
 	symidx_t GetSymbolSubIdx(RansGroup group, symbol_t symbol);
-	inline void GetSymbolGroup(prob_t symbolCDF, RansGroup& out);
+	inline RansGroup GetSymbolGroup(const prob_t symbolCDF);
 	// used for writing to disk
 	// [group](PDF, symbols[])
 	TableGroupList GenerateGroupCDFs();
@@ -109,7 +92,7 @@ public:
 
 	inline RansGroup GetSymbolGroup(const symbol_t symbol);
 	inline symidx_t GetSymbolSubIdx(const symbol_t symbol);
-	inline void GetSymbolGroupFromFreq(const prob_t prob, RansGroup& out);
+	inline RansGroup GetSymbolGroupFromFreq(const prob_t prob);
 	inline symbol_t GetSymbolFromGroup(const RansGroup group, const symidx_t subIndex);
 
 	// used for writing to disk
