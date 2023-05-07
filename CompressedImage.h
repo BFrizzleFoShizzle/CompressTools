@@ -6,7 +6,7 @@
 
 struct CompressedImageHeader
 {
-    static const uint16_t CURR_VERSION = 0x0003;
+    static const uint16_t CURR_VERSION = 0x0004;
     CompressedImageHeader()
     {
 

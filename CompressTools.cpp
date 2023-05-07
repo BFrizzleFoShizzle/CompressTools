@@ -17,6 +17,8 @@
 #include "RansEncode.h"
 #include "CompressedImage.h"
 
+#include <chrono>
+
 void GetSymbolEntropy(std::vector<uint16_t> symbols)
 {
     std::cout << "Counting symbols..." << std::endl;
@@ -56,14 +58,42 @@ void FreeImageErrorHandler(FREE_IMAGE_FORMAT fif, const char* message) {
     printf(" ***\n");
 }
 
-
-int main()
+int main(int argc, char* argv[])
 {
+    std::string inputFileName = "./data/newland/land/fullmap.tif";
+    std::string outputFileName = "./data/newland/land/fullmap.cif";
+
+    if (argc >= 2)
+        inputFileName = argv[1];
+    if (argc >= 3)
+        outputFileName = argv[2];
+
+    std::cout << "Input: " << inputFileName << std::endl;
+    std::cout << "Output: " << outputFileName << std::endl;
+
+    // benchmark test code
+    if (false)
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration = std::chrono::high_resolution_clock::now() - start;
+        std::cout << "Decode benchmark..." << std::endl;
+        start = std::chrono::high_resolution_clock::now();
+        std::shared_ptr<CompressedImage> streamedImage = CompressedImage::OpenStream(outputFileName);
+        duration = std::chrono::high_resolution_clock::now() - start;
+        std::cout << "init: " << duration.count() << std::endl;
+        start = std::chrono::high_resolution_clock::now();
+        std::vector<symbol_t> decodedPixels = streamedImage->GetBottomLevelPixels();
+        duration = std::chrono::high_resolution_clock::now() - start;
+        std::cout << "decode: " << duration.count() << std::endl;
+        return 0;
+    }
+
+    // normal compressor
     std::cout << "Opening image..." << std::endl;
     FreeImage_Initialise();
     FreeImage_SetOutputMessage(FreeImageErrorHandler);
-    FIBITMAP *bitmap = FreeImage_Load(FREE_IMAGE_FORMAT::FIF_TIFF, "./data/newland/land/fullmap.tif", TIFF_DEFAULT);
-    
+    FIBITMAP* bitmap = FreeImage_Load(FREE_IMAGE_FORMAT::FIF_TIFF, inputFileName.c_str(), TIFF_DEFAULT);
+
     int width = FreeImage_GetWidth(bitmap);
     int height = FreeImage_GetHeight(bitmap);
     int precision = FreeImage_GetBPP(bitmap);
@@ -89,11 +119,27 @@ int main()
         std::cout << "Serializing..." << std::endl; 
         std::vector<uint8_t> imageBytes = compressedImage->Serialize();
         std::cout << "Final encoded bytes: " << imageBytes.size() << std::endl;
-        ByteIteratorPtr imageByteIter = ByteStreamFromVector(&imageBytes);
-        std::shared_ptr<CompressedImage> decodedImage = CompressedImage::Deserialize(*imageByteIter);
 
+        // write to disk
+        std::cout << "Writing bytes..." << std::endl;
+        std::ofstream compressedFile(outputFileName, std::ios::binary);
+        if (compressedFile.is_open())
+        {
+            compressedFile.write((const char*)&imageBytes[0], imageBytes.size());
+            compressedFile.close();
+        }
+        else
+        {
+            std::cerr << "Error opening output file!";
+        }
+
+
+        auto start = std::chrono::high_resolution_clock::now();
+        std::shared_ptr<CompressedImage> decodedImage = CompressedImage::OpenStream(outputFileName);
+        std::chrono::duration<double>  duration = std::chrono::high_resolution_clock::now() - start;
+        std::cout << "File open time: " << duration.count() << std::endl;
+        /*
         std::cout << decodedImage->GetTopLOD() << std::endl;
-        
         std::vector<uint8_t> blockLevels = decodedImage->GetBlockLevels();
         std::cout << int(blockLevels[0]) << std::endl;
         decodedImage->GetPixel(0, 0);
@@ -112,7 +158,7 @@ int main()
         decodedImage->GetPixel(8, 0);
         blockLevels = decodedImage->GetBlockLevels();
         std::cout << int(blockLevels[0]) << std::endl;
-        
+        */
         // test parent reads
         for (int y = 0; y < height; y += 16)
         {
@@ -120,32 +166,38 @@ int main()
             {
                 uint16_t sourcePixel = values[y * width + x];
                 uint16_t decodedPixel = decodedImage->GetPixel(x, y);
-                assert(decodedPixel == sourcePixel);
                 if (decodedPixel != sourcePixel)
                 {
                     std::cout << "Decoded pixel values at (" << x << ", " << y << ") did not match." << std::endl;
                 }
+                assert(decodedPixel == sourcePixel);
             }
         }
-        
+
         // test aligned reads
         std::cout << "Testing aligned reads..." << std::endl;
+        start = std::chrono::high_resolution_clock::now();
         for (int y = 1024; y < 2048; y += 4)
         {
             for (int x = 1024; x < 2048; x += 4)
             {
                 uint16_t sourcePixel = values[y * width + x];
                 uint16_t decodedPixel = decodedImage->GetPixel(x, y);
-                assert(decodedPixel == sourcePixel);
                 if (decodedPixel != sourcePixel)
                 {
                     std::cout << "Decoded pixel values at (" << x << ", " << y << ") did not match." << std::endl;
                 }
+                assert(decodedPixel == sourcePixel);
             }
         }
+        duration = std::chrono::high_resolution_clock::now() - start;
+        std::cout << "Test time: " << duration.count() << std::endl;
 
         std::cout << "Decoding bottom-level pixels..." << std::endl;
+        start = std::chrono::high_resolution_clock::now();
         std::vector<uint16_t> decodedPixels = decodedImage->GetBottomLevelPixels();
+        duration = std::chrono::high_resolution_clock::now() - start;
+        std::cout << "Decode time: " << duration.count() << std::endl;
         for (int i = 0; i < values.size(); ++i)
         {
             assert(values[i] == decodedPixels[i]);
@@ -155,42 +207,9 @@ int main()
             }
         }
         std::cout << "Values checked!" << std::endl;
+        decodedImage.reset();
 
-        // write to disk
-        std::cout << "Writing bytes..." << std::endl;
-        std::ofstream compressedFile("./data/newland/land/fullmap.cif", std::ios::binary);
-        if (compressedFile.is_open())
-        {
-            compressedFile.write((const char*)&imageBytes[0], imageBytes.size());
-            compressedFile.close();
-        }
-        else
-        {
-            std::cerr << "Error opening output file!";
-        }
-
-        std::cout << "Image streaming tests..." << std::endl;
-        std::shared_ptr<CompressedImage> streamedImage = CompressedImage::OpenStream("./data/newland/land/fullmap.cif");
-        std::cout << "Initial RAM usage: " << streamedImage->GetMemoryUsage() << std::endl;
-        // test aligned reads
-        std::cout << "Testing aligned reads..." << std::endl;
-        for (int y = 1024; y < 2048; y += 4)
-        {
-            for (int x = 1024; x < 2048; x += 4)
-            {
-                uint16_t sourcePixel = values[y * width + x];
-                uint16_t decodedPixel = streamedImage->GetPixel(x, y);
-                assert(decodedPixel == sourcePixel);
-                if (decodedPixel != sourcePixel)
-                {
-                    std::cout << "Decoded pixel values at (" << x << ", " << y << ") did not match." << std::endl;
-                }
-            }
-        }
-        std::cout << "End RAM usage: " << streamedImage->GetMemoryUsage() << std::endl;
-        
         std::cout << "Done!" << std::endl;
-
     }
     
     FreeImage_Unload(bitmap);
