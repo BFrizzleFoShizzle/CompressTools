@@ -188,7 +188,7 @@ IteratorPtr<T> StreamFromFile(FastFileStream* bytes, size_t position)
 template<typename T, typename BT>
 T ReadValue(Iterator<BT> &input)
 {
-    assert(sizeof(T) % sizeof(BT) == 0);
+    assert_release(sizeof(T) % sizeof(BT) == 0);
     T value;
     BT* valueBlocks = reinterpret_cast<BT*>(&value);
 
@@ -318,7 +318,7 @@ public:
     }
     std::shared_ptr<Stream<T>> get_stream() override
     {
-        assert(false);
+        assert_release(false);
         return std::shared_ptr<Stream<T>>();
     }
 private:
@@ -339,7 +339,7 @@ public:
     void push_back(T val) override
     {
         // TODO
-        assert(false);
+        assert_release(false);
     }
     void pop_back() override
     {
@@ -357,7 +357,7 @@ public:
     std::vector<T> get_vec() override
     {
         // TODO
-        assert(false);
+        assert_release(false);
         return std::vector<T>();
     }
     std::shared_ptr<Stream<T>> get_stream() override
@@ -388,7 +388,7 @@ public:
     void push_back(T val) override
     {
         // TODO
-        assert(false);
+        assert_release(false);
     }
     void pop_back() override
     {
@@ -409,7 +409,7 @@ public:
     std::vector<T> get_vec() override
     {
         // TODO
-        assert(false);
+        assert_release(false);
         return std::vector<T>();
     }
     std::shared_ptr<Stream<T>> get_stream() override

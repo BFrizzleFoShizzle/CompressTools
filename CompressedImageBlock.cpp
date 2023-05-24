@@ -38,7 +38,7 @@ CompressedImageBlock::CompressedImageBlock(CompressedImageBlockHeader header, It
     if (header.finalRansState == 0)
     {
         std::cout << "INVALID FINAL rANS STATE!" << std::endl;
-        assert(false);
+        assert_release(false);
         return;
     }
 
@@ -123,7 +123,7 @@ uint32_t CompressedImageBlock::DecodeToLevel(uint32_t targetLevel)
         if (wavelets.size() != waveletsCount)
         {
             std::cout << "Wrong number of wavelets decoded! Decoded " << wavelets.size() << " but expected " << waveletsCount << std::endl;
-            assert(false);
+            assert_release(false);
             return -1;
         }
 
@@ -141,7 +141,7 @@ std::vector<symbol_t> CompressedImageBlock::GetLevelPixels(uint32_t level)
     uint32_t currLevel = DecodeToLevel(level);
     
     // error-handling
-    assert(currLevel != -1);
+    assert_release(currLevel != -1);
 
     if (currLevel == level)
     {
@@ -294,7 +294,7 @@ symbol_t CompressedImageBlock::GetPixel(uint32_t x, uint32_t y)
             std::cout << rootLevel << " " << positionLevel << " " << decodedLevel << std::endl;
         }
 
-        assert(decodedLevel == positionLevel);
+        assert_release(decodedLevel == positionLevel);
         return currDecodeLayer->GetPixelAt(shiftedX, shiftedY);
     }
 }

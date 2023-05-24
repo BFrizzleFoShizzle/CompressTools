@@ -87,6 +87,7 @@
   <ItemGroup>
     <ClCompile Include="CompressedImage.cpp" />
     <ClCompile Include="CompressedImageBlock.cpp" />
+    <ClCompile Include="Logging.cpp" />
     <ClCompile Include="RansEncode.cpp" />
     <ClCompile Include="Serialize.cpp" />
     <ClCompile Include="WaveletDecodeLayer.cpp" />
@@ -96,6 +97,7 @@
   <ItemGroup>
     <ClInclude Include="CompressedImage.h" />
     <ClInclude Include="CompressedImageBlock.h" />
+    <ClInclude Include="Logging.h" />
     <ClInclude Include="Precision.h" />
     <ClInclude Include="RansEncode.h" />
     <ClInclude Include="Release_Assert.h" />

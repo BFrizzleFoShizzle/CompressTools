@@ -210,9 +210,10 @@ std::shared_ptr<CompressedImage> CompressedImage::GenerateFromStream(ByteIterato
     // read header
     std::cout << "Reading CompressedImage header..." << std::endl;
     CompressedImageHeader header = ReadValue<CompressedImageHeader>(bytes);
-    assert(header.IsCorrect());
     if (!header.IsCorrect())
         std::cerr << "Image header validation failed in CompressedImage::Deserialize()" << std::endl;
+
+    assert_release(header.IsCorrect());
 
     size_t parentValsWidth = header.width / (header.blockSize / 2);
     if (header.width % (header.blockSize) != 0)

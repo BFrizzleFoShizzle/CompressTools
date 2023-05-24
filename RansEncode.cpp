@@ -36,8 +36,8 @@ std::vector<SymbolPDF> EntropySortSymbols(const SymbolCountDict &dict)
 CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilityRes,
 	std::unordered_map<symbol_t, RansGroup>& symbolGroupsOut, std::unordered_map<symbol_t, symidx_t>& symbolSubIdxOut)
 {
-	assert(RansGroup(1, 2, 3, 4).Pack() == RansGroup(RansGroup(1, 2, 3, 4).Pack()).Pack());
-	assert(RansGroup(1, 2, 3, 4).Pack() == 0x0002000100040003ull);
+	assert_release(RansGroup(1, 2, 3, 4).Pack() == RansGroup(RansGroup(1, 2, 3, 4).Pack()).Pack());
+	assert_release(RansGroup(1, 2, 3, 4).Pack() == 0x0002000100040003ull);
 	size_t probabilityRange = 1 << probabilityRes;
 
 	uint64_t countsSum = 0;
@@ -50,7 +50,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 	if (countsSum == probabilityRange || countsSum == 65535)
 	{
 		// TODO
-		assert(false);
+		assert_release(false);
 	}
 
 	std::vector<SymbolPDF> sortedSymbolCounts = EntropySortSymbols(unquantizedCounts);
@@ -114,7 +114,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 	std::vector<SymbolPDF> culledGroups;
 	// this currently matches the code...
 	// TODO if we write the raw to rANS state, we can reduce this
-	assert(sizeof(block_t) >= 2);
+	assert_release(sizeof(block_t) >= 2);
 	size_t sizeOfRawInBits = 8 * sizeof(block_t);
 	for (int i = initialGroupCounts.size() - 1; i > 1; --i)
 	{
@@ -127,7 +127,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 		double newGroupSelectionEntropy = newCount * -log2(double(newCount) / countsSum);
 		double groupCrossEntropy = groupNewEntropy - groupEntropy;
 		double groupSelectionCheckEntropy = initialGroupCounts[i].pdf * -log2(double(newCount) / countsSum);
-		assert(groupSelectionCheckEntropy + groupCrossEntropy > 0.0);
+		assert_release(groupSelectionCheckEntropy + groupCrossEntropy > 0.0);
 		uint32_t nextStart = sortedSymbolCounts.size() - 1;
 		if (groupIdx < initialGroupCounts.size() - 1)
 			nextStart = initialStarts[groupIdx + 1];
@@ -148,7 +148,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 	prob_t noCompressPDF = (rawSymbolCount * probabilityRange) / countsSum;
 
 	// this is needed for GetSymbolGroup optimizations to work
-	assert(noCompressPDF > 0);
+	assert_release(noCompressPDF > 0);
 
 	for (auto culledGroup : culledGroups)
 		for (auto symbol : initialGroups[culledGroup.symbol])
@@ -165,7 +165,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 	for (auto symbolCount : initialGroupCounts)
 	{
 		uint64_t newCount = (symbolCount.pdf * probabilityRange) / countsSum;
-		assert(newCount <= probabilityRange);
+		assert_release(newCount <= probabilityRange);
 		newCount = std::max(1ull, newCount);
 		quantizedGroupPDFs.emplace(symbolCount.symbol, newCount);
 		quantizedGroupPDFsSum += newCount;
@@ -209,7 +209,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 		// we now have the symbol that gives the smallest-entropy error
 		// when subtracting one from it's quantized count/probability
 		// TODO ERROR
-		assert(smallestErrorGroup != -1);
+		assert_release(smallestErrorGroup != -1);
 
 		// subtract one from probability
 		quantizedGroupPDFs[smallestErrorGroup] -= 1;
@@ -233,7 +233,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 				biggestGainGroup = quantizedPDF.first;
 			}
 		}
-		assert(biggestGainGroup != -1);
+		assert_release(biggestGainGroup != -1);
 
 		// Add one to probability
 		quantizedGroupPDFs[biggestGainGroup] += 1;
@@ -351,8 +351,8 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 		symidx_t oldGroupStart = finalGroupStarts[groupPDF.symbol];
 		symidx_t newGroupStart = symbols.size();
 		// TODO move this check earlier
-		assert(oldGroupStart < 65536);
-		assert(newGroupStart < 65536);
+		assert_release(oldGroupStart < 65536);
+		assert_release(newGroupStart < 65536);
 
 		// Final check for if all symbols are in the correct group
 		count_t checkedCount = 0;
@@ -373,7 +373,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 		}
 		if (pivotIdx != PIVOT_INVALID)
 			groupStarts.push_back(newGroupStart);
-		assert(groupSymbolCount == checkedCount);
+		assert_release(groupSymbolCount == checkedCount);
 	}
 	finalCount += rawSymbolCount;
 	rawCDF = finalCDF;
@@ -401,8 +401,8 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 	std::cout << symbols.size() << " symbols" << std::endl;
 	std::cout << groupCDFs.size() << " groups" << std::endl;
 
-	assert(countsSum == finalCount);
-	assert(probabilityRange == finalCDF);
+	assert_release(countsSum == finalCount);
+	assert_release(probabilityRange == finalCDF);
 
 	// generate encoding tables
 	prob_t lastCDF = 0;
@@ -411,7 +411,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 		prob_t groupCDF = groupCDFs[i];
 		prob_t groupPDF = groupCDF - lastCDF;
 
-		assert(lastCDF != rawCDF);
+		assert_release(lastCDF != rawCDF);
 
 		// fast path
 		symidx_t groupEntryCount = 1;
@@ -427,7 +427,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 				nextGroupStart = groupStarts[groupStart + 1];
 			// get actual start
 			groupStart = groupStarts[groupStart];
-			assert(nextGroupStart > groupStart);
+			assert_release(nextGroupStart > groupStart);
 			groupEntryCount = nextGroupStart - groupStart;
 		}
 
@@ -442,7 +442,7 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 	}
 
 	// remaining CDF should be raw
-	assert(lastCDF == rawCDF);
+	assert_release(lastCDF == rawCDF);
 
 	// check all symbols encode/decode correctly
 	for (auto symbolCount : unquantizedCounts)
@@ -454,40 +454,40 @@ CDFTable::CDFTable(const SymbolCountDict& unquantizedCounts, uint16_t probabilit
 		if (group.start == (symidx_t)-1)
 			continue;
 
-		assert(group.cdf < rawCDF);
+		assert_release(group.cdf < rawCDF);
 
 		// check group CDF lookup
 		RansGroup test1 = GetSymbolGroup(group.cdf);
-		assert(test1.pdf == group.pdf);
-		assert(test1.cdf == group.cdf);
+		assert_release(test1.pdf == group.pdf);
+		assert_release(test1.cdf == group.cdf);
 		// test output
 		if (test1.start == 0)
 		{
-			assert(group.count == 1);
-			assert(test1.count == symbol);
+			assert_release(group.count == 1);
+			assert_release(test1.count == symbol);
 		}
 		else
 		{
-			assert(test1.start == group.start);
-			assert(test1.count == group.count);
+			assert_release(test1.start == group.start);
+			assert_release(test1.count == group.count);
 			symidx_t subIdx = symbolSubIdxOut[symbol];
-			assert(symbol == GetSymbol(test1.Pack(), subIdx));
+			assert_release(symbol == GetSymbol(test1.Pack(), subIdx));
 		}
 		RansGroup test2 = GetSymbolGroup(group.cdf + group.pdf - 1);
-		assert(test2.pdf == group.pdf);
-		assert(test2.cdf == group.cdf);
+		assert_release(test2.pdf == group.pdf);
+		assert_release(test2.cdf == group.cdf);
 		// test output
 		if (test2.start == 0)
 		{
-			assert(group.count == 1);
-			assert(test2.count == symbol);
+			assert_release(group.count == 1);
+			assert_release(test2.count == symbol);
 		}
 		else
 		{
-			assert(test2.start == group.start);
-			assert(test2.count == group.count);
+			assert_release(test2.start == group.start);
+			assert_release(test2.count == group.count);
 			symidx_t subIdx = symbolSubIdxOut[symbol];
-			assert(symbol == GetSymbol(test2.Pack(), subIdx));
+			assert_release(symbol == GetSymbol(test2.Pack(), subIdx));
 		}
 	}
 
@@ -532,13 +532,13 @@ CDFTable::CDFTable(const TableGroupList& groupList, uint32_t probabilityRes)
 
 	rawCDF = groupCDFs.back();
 
-	assert(groupList.back().second.size() == 0);
+	assert_release(groupList.back().second.size() == 0);
 	groupCDFs.push_back(groupList.back().first);
 
 	// this is needed for GetSymbolGroup optimizations to work
-	assert(groupCDFs.back() - rawCDF > 0);
+	assert_release(groupCDFs.back() - rawCDF > 0);
 
-	assert(groupCDFs.back() == 1 << probabilityRes || groupCDFs.back() == 65535);
+	assert_release(groupCDFs.back() == 1 << probabilityRes || groupCDFs.back() == 65535);
 }
 
 group_packed_t CDFTable::GetSymbolGroup(const prob_t symbolCDF)
@@ -582,7 +582,7 @@ group_packed_t CDFTable::GetSymbolGroup(const prob_t symbolCDF)
 	while (*groupCDFp <= symbolCDF)
 		++groupCDFp;
 
-	//assert(*groupCDFp <= rawCDF);
+	//assert_release(*groupCDFp <= rawCDF);
 
 	// calculate PDF
 	prob_t groupStartCDF = 0;
@@ -644,7 +644,7 @@ TableGroupList CDFTable::GenerateGroupCDFs()
 		groupList.emplace_back(groupCDFs[groupIdx], std::move(groupSymbols));
 		//std::cout << groupIdx << " " << groupStart << " " << numChildren << " " << groupCDFs[groupIdx] << std::endl;
 	}
-	assert(groupList.back().first == rawCDF);
+	assert_release(groupList.back().first == rawCDF);
 	// rawCDF
 	groupList.emplace_back(groupCDFs.back(), std::vector<symbol_t>());
 
@@ -756,7 +756,7 @@ void RansState::AddGroup(RansGroup group)
 
 	// renormalize if necessary
 
-	assert(group.cdf < PROBABILITY_RANGE);
+	assert_release(group.cdf < PROBABILITY_RANGE);
 
 	// write group (also handles fast path)
 	// add symbol to rANS state
@@ -783,7 +783,7 @@ void RansState::AddGroup(RansGroup group)
 		}
 	}
 
-	assert(count != 3);
+	assert_release(count != 3);
 
 	/*
 	// renormalize if necessary
@@ -813,8 +813,8 @@ void RansState::AddGroup(RansGroup group)
 	//std::cout << "State3: " << ransState << std::endl;
 
 	// current state is the state our value will be decoded at
-	assert(ransState >= STATE_MIN);
-	assert(ransState <= STATE_MAX);
+	assert_release(ransState >= STATE_MIN);
+	assert_release(ransState <= STATE_MAX);
 }
 
 void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
@@ -831,9 +831,9 @@ void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
 		return;
 	}
 
-	assert(symbolIdx < group.count);
-	assert(group.count > 1);
-	assert(group.count < PROBABILITY_RANGE);
+	assert_release(symbolIdx < group.count);
+	assert_release(group.count > 1);
+	assert_release(group.count < PROBABILITY_RANGE);
 
 	//std::cout << "State1: " << ransState2 << std::endl;
 	// renormalize if necessary
@@ -871,9 +871,9 @@ void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
 	*/
 	
 	prob_t pdf = (PROBABILITY_RANGE - 1) / group.count;
-	assert(pdf > 0);
+	assert_release(pdf > 0);
 	prob_t cdf = pdf * symbolIdx;
-	assert(cdf < PROBABILITY_RANGE);
+	assert_release(cdf < PROBABILITY_RANGE);
 	// renormalize if necessary
 	// add symbol to rANS state
 	state_t newState = ransState / pdf;
@@ -898,7 +898,7 @@ void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
 		}
 	}
 
-	assert(count != 3);
+	assert_release(count != 3);
 	
 	/*
 	// renormalize if necessary
@@ -917,9 +917,9 @@ void RansState::AddSubIdx(symbol_t symbol, RansGroup group)
 	//std::cout << "State3: " << newState << " " << STATE_MIN  << " " << STATE_MAX << std::endl;
 
 	// current state is the state our value will be decoded at
-	//assert(ransState2 >= group.count);
-	assert(ransState >= STATE_MIN);
-	assert(ransState <= STATE_MAX);
+	//assert_release(ransState2 >= group.count);
+	assert_release(ransState >= STATE_MIN);
+	assert_release(ransState <= STATE_MAX);
 }
 
 // Encode symbol
@@ -1056,19 +1056,19 @@ symbol_t RansState::ReadSymbol()
 	// this shouldn't trigger anymore
 	/*
 	if (group.count == 1)
-		assert(false);
+		assert_release(false);
 		//return ransTable->GetSymbolFromGroup(group, 0);
 		*/
 
 	// read index
 	// (groupShifted >> 16) & 0xFFFF = count
-	//assert(((groupShifted >> 16) & 0xFFFF) > 0);
+	//assert_release(((groupShifted >> 16) & 0xFFFF) > 0);
 	prob_t pdf = (PROBABILITY_RANGE - 1) / (groupShifted >> 16);
-	assert(pdf > 0);
+	assert_release(pdf > 0);
 	prob_t readCDF = ransState % PROBABILITY_RANGE;
 	symidx_t index = readCDF / pdf;
 	prob_t cdf = pdf * index;
-	assert(cdf < PROBABILITY_RANGE);
+	assert_release(cdf < PROBABILITY_RANGE);
 	newState = ransState / PROBABILITY_RANGE;
 	newState = newState * pdf;
 	newState += ransState % PROBABILITY_RANGE;

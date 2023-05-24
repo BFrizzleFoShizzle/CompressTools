@@ -6,7 +6,7 @@
 WaveletEncodeLayer::WaveletEncodeLayer(std::vector<uint16_t> values, uint32_t width, uint32_t height)
     : size(width, height)
 {
-    assert(values.size() == width * height);
+    assert_release(values.size() == width * height);
     //  Initialize + prealloc memory
     wavelets.resize(size.GetWaveletCount());
     uint32_t parentReserveCount = size.GetParentSize().GetPixelCount();
@@ -169,7 +169,7 @@ WaveletEncodeLayer::WaveletEncodeLayer(std::vector<uint16_t> values, uint32_t wi
     //GetSymbolEntropy(layer->wavelets);
 
     // process parent layer
-    assert(parentReserveCount == parentVals.size());
+    assert_release(parentReserveCount == parentVals.size());
     if (!IsRoot())
     {
         parent = std::make_shared<WaveletEncodeLayer>(parentVals, size.GetParentWidth(), size.GetParentHeight());

@@ -170,7 +170,7 @@ int main(int argc, char* argv[])
                 {
                     std::cout << "Decoded pixel values at (" << x << ", " << y << ") did not match." << std::endl;
                 }
-                assert(decodedPixel == sourcePixel);
+                assert_release(decodedPixel == sourcePixel);
             }
         }
 
@@ -187,7 +187,7 @@ int main(int argc, char* argv[])
                 {
                     std::cout << "Decoded pixel values at (" << x << ", " << y << ") did not match." << std::endl;
                 }
-                assert(decodedPixel == sourcePixel);
+                assert_release(decodedPixel == sourcePixel);
             }
         }
         duration = std::chrono::high_resolution_clock::now() - start;
@@ -200,7 +200,7 @@ int main(int argc, char* argv[])
         std::cout << "Decode time: " << duration.count() << std::endl;
         for (int i = 0; i < values.size(); ++i)
         {
-            assert(values[i] == decodedPixels[i]);
+            assert_release(values[i] == decodedPixels[i]);
             if (values[i] != decodedPixels[i])
             {
                 std::cout << "Decoded wavelet values at " << i << " did not match." << std::endl;

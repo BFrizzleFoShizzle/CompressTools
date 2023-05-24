@@ -1,5 +1,6 @@
 #include "CompressToolsLib.h"
 #include "CompressedImage.h"
+#include "Logging.h"
 
 #include <fstream>
 #include <vector>
@@ -59,6 +60,12 @@ __declspec(dllexport) uint16_t CompressToolsLib::ReadHeightValue(CompressedImage
 __declspec(dllexport) void CompressToolsLib::CloseImage(CompressedImageFileHdl image)
 {
 	delete image;
+}
+
+__declspec(dllexport) void CompressToolsLib::SetLoggers(void(*debugLogger)(const char*), void(*errorLogger)(const char*))
+{
+	SetDebugLogger(debugLogger);
+	SetErrorLogger(errorLogger);
 }
 
 __declspec(dllexport) uint32_t CompressToolsLib::GetImageWidthInBlocks(CompressedImageFileHdl image)
