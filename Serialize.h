@@ -39,6 +39,7 @@ public:
     size_t GetPosition() const;
     void Read(void* dest, size_t length);
     void Close();
+    bool Failed();
 private:
     size_t position;
     std::basic_ifstream<uint8_t> fileStream;

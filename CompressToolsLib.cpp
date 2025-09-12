@@ -21,10 +21,20 @@ struct CompressToolsLib::CompressedImageFile
 
 __declspec(dllexport) CompressedImageFileHdl CompressToolsLib::OpenImage(const char* filename, ImageMode mode)
 {
+	// try open
+	std::shared_ptr<CompressedImage> image = CompressedImage::OpenStream(filename);
+
+	// error opening
+	if (!image)
+	{
+		ErrorLog(std::string("Error opening image: ") + filename);
+		return nullptr;
+	}
+
 	// decode
 	CompressedImageFileHdl imageHdl = new CompressedImageFile();
 	imageHdl->filename = filename;
-	imageHdl->image = CompressedImage::OpenStream(filename);
+	imageHdl->image = image;
 	if (mode == ImageMode::Preload)
 		imageHdl->decodedPixels = imageHdl->image->GetBottomLevelPixels();
 	// TODO temporary - delete this later

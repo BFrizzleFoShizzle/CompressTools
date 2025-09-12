@@ -359,6 +359,10 @@ std::shared_ptr<CompressedImage> CompressedImage::OpenStream(std::string filenam
     // Open file 
     FastFileStream compressedFile(filename);
 
+    // error
+    if (compressedFile.Failed())
+        return std::shared_ptr<CompressedImage>();
+
     ByteIteratorPtr bytes = StreamFromFile<uint8_t>(&compressedFile);
 
     // read headers

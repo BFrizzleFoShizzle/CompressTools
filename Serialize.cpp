@@ -47,3 +47,8 @@ void FastFileStream::Close()
 {
     fileStream.close();
 }
+
+bool FastFileStream::Failed()
+{
+    return fileStream.fail();
+}
