@@ -10,5 +10,5 @@ extern "C" {
 #define LINE_STRING STRINGIZE(__LINE__)
 #define assert_release(expression) \
 	((!!(expression)) \
-	|| (ErrorLog(std::string("Assertion failed: ") + #expression + " in " + __FILE__ + " line: " + LINE_STRING), 0) \
+	|| (CompressTools::ErrorLog(std::string("Assertion failed: ") + #expression + " in " + __FILE__ + " line: " + LINE_STRING), 0) \
 	|| (_wassert(_CRT_WIDE(#expression), _CRT_WIDE(__FILE__), (unsigned)(__LINE__)), 0)) /*(throw std::exception("Assert failed"), 0))*/

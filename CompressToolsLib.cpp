@@ -27,7 +27,7 @@ __declspec(dllexport) CompressedImageFileHdl CompressToolsLib::OpenImage(const c
 	// error opening
 	if (!image)
 	{
-		ErrorLog(std::string("Error opening image: ") + filename);
+		CompressTools::ErrorLog(std::string("Error opening image: ") + filename);
 		return nullptr;
 	}
 
@@ -74,8 +74,8 @@ __declspec(dllexport) void CompressToolsLib::CloseImage(CompressedImageFileHdl i
 
 __declspec(dllexport) void CompressToolsLib::SetLoggers(void(*debugLogger)(const char*), void(*errorLogger)(const char*))
 {
-	SetDebugLogger(debugLogger);
-	SetErrorLogger(errorLogger);
+	CompressTools::SetDebugLogger(debugLogger);
+	CompressTools::SetErrorLogger(errorLogger);
 }
 
 __declspec(dllexport) uint32_t CompressToolsLib::GetImageWidthInBlocks(CompressedImageFileHdl image)
